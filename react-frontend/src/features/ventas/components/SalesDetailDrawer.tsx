@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { VentaDetailRecord } from "../../../services/salesService"
 import { formatMoneyOrDash } from "../../../utils/number"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
 import { SaleInvoicePrintable } from "./SaleInvoicePrintable"
 import { downloadSalePdf } from "../utils/salePdf"
 
