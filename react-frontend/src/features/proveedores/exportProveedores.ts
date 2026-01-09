@@ -41,7 +41,7 @@ export function exportToPDF(rows: ExportRow[], baseName: string) {
 	const tableColumns = ["ID Proveedor", "Nombre", "Cédula/RUC", "Correo", "Teléfono", "Dirección", "Fecha Registro"]
 	const tableRows = rows.map(row => Object.values(row))
 
-	;(doc as any).autoTable({
+	;(doc as unknown as { autoTable: (options: unknown) => void }).autoTable({
 		head: [tableColumns],
 		body: tableRows,
 		startY: 30,
