@@ -29,7 +29,7 @@ export function SaleSuccessDialog({
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-lg" disableOutsideClose hideCloseButton>
+      <DialogContent className="dialog-content w-full max-w-lg" disableOutsideClose hideCloseButton>
         <DialogHeader>
           <DialogTitle>Venta registrada</DialogTitle>
           <DialogDescription>La factura se generó correctamente.</DialogDescription>

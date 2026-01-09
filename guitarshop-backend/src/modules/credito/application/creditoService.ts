@@ -6,6 +6,7 @@ const creditoSelect = {
   id_factura: true,
   monto_total: true,
   saldo_pendiente: true,
+  estado_credito: true,
   fecha_inicio: true,
   fecha_fin: true,
   id_estado: true,

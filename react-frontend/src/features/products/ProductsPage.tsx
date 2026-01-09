@@ -10,11 +10,10 @@ import { useIsFetching, useMutation, useQueryClient } from "@tanstack/react-quer
 import { useLocation, useNavigate } from "react-router-dom"
 import {
 	AlertCircle,
-	Boxes,
+	Eye,
 	Image as ImageIcon,
 	Loader2,
 	Package,
-	Pencil,
 	Plus,
 	ShieldAlert,
 	Trash2,
@@ -22,7 +21,7 @@ import {
 } from "lucide-react"
 import * as XLSX from "xlsx"
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../components/ui/drawer"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
@@ -33,36 +32,30 @@ import {
 	type ProductCategoryValue,
 } from "../../config/productCategories"
 
-import type { ProductsFilters, ProductsViewMode } from "./product.types"
+import type { ProductsFilters } from "./product.types"
 import type { ProductoPayload, ProductoRecord, ProductSalesSummary, ProveedorRecord } from "./product.types"
 import { productClient } from "./product.client"
 import {
 	computeMargin,
 	computeMarginPercent,
-	marginStatusLabel,
 	marginStatusWeight,
-	matchesMarginFilter,
 	matchesSalesFilter,
-	matchesStockFilter,
 	productStockStatusLabel,
 	resolveStockStatus,
 	resolveMarginStatus,
 	resolveProductStockStatus,
 	resolveSalesStatus,
 	stockStatusLabel,
-	salesStatusLabel,
 	salesStatusWeight,
 	stockStatusWeight,
 } from "./product.utils"
 import {
-	productsQueryKey,
 	useKardexQuery,
 	useProductImagesQuery,
 	useProductSalesSummaryQuery,
 	useProductsQuery,
 	useProvidersQuery,
 } from "./useProductsQuery"
-import { exportToCSV, exportToPDF, exportToXLSX, type ExportRow as ExportFileRow } from "./exportProducts"
 
 import { ProductsFiltersDrawer } from "./components/ProductsFiltersDrawer"
 import { ProductsListHeader } from "./components/ProductsListHeader"
@@ -123,9 +116,9 @@ type ApiErrorResponse = {
 }
 
 const PAGE_SIZE_STORAGE_KEY = "products.pageSize"
-const PAGE_SIZE_OPTIONS = [8, 16, 24, 32] as const
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40] as const
 type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
-const DEFAULT_PAGE_SIZE: PageSizeOption = 16
+const DEFAULT_PAGE_SIZE: PageSizeOption = 20
 
 const importFieldConfig: { key: ImportFieldKey; label: string; required: boolean }[] = [
 	{ key: "nombre_producto", label: "Nombre", required: true },
@@ -325,77 +318,6 @@ const resolveProveedorId = (value: string, proveedores: ProveedorRecord[]) => {
 	return byName?.id_proveedor ?? null
 }
 
-type ExportScope = "page" | "filtered" | "all"
-
-type ProductExportRow = {
-	Código: string
-	Categoría: string
-	Nombre: string
-	Proveedor: string
-	Venta: string
-	Compra: string
-	Margen: string
-	StockActual: string
-	StockMinimo: string
-	Estado: string
-	Ventas30d: string
-}
-
-const formatMoney = (value: number | null | undefined) => {
-	if (value === null || value === undefined) return "—"
-	const numeric = Number(value)
-	if (!Number.isFinite(numeric)) return "—"
-	return new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numeric)
-}
-
-const formatCell = (value: unknown) => {
-	if (value === null || value === undefined) return "—"
-	if (typeof value === "string") return value.trim() ? value : "—"
-	if (typeof value === "number") return Number.isFinite(value) ? String(value) : "—"
-	return String(value)
-}
-
-const buildExportRows = (records: ProductoRecord[], getSalesSummary: (idProducto: number) => ProductSalesSummary | null) =>
-	records.map<ProductExportRow>((producto) => {
-		const venta = Number(producto.precio_venta ?? 0)
-		const compraNumber = Number(producto.precio_compra ?? 0)
-		const hasCompra = Number.isFinite(compraNumber) && compraNumber > 0
-		const margen = hasCompra ? venta - compraNumber : null
-
-		const stockStatus = resolveProductStockStatus(producto)
-		const marginStatus = resolveMarginStatus(producto)
-		const summary = getSalesSummary(producto.id_producto)
-		const salesStatus = resolveSalesStatus(summary)
-
-		const estadoParts = [
-			`Stock: ${productStockStatusLabel(stockStatus)}`,
-			salesStatus ? `Ventas: ${salesStatusLabel(salesStatus)}` : "Ventas: —",
-			`Margen: ${marginStatusLabel(marginStatus)}`,
-			!hasCompra ? "Compra: Sin costo" : null,
-		].filter(Boolean)
-
-		return {
-			Código: formatCell(producto.codigo_producto),
-			Categoría: formatCell(inferCategoryFromCode(producto.codigo_producto)?.toUpperCase() ?? "N/D"),
-			Nombre: formatCell(producto.nombre_producto),
-			Proveedor: formatCell(producto.proveedor?.nombre_proveedor ?? "Sin proveedor"),
-			Venta: formatMoney(venta),
-			Compra: hasCompra ? formatMoney(compraNumber) : "—",
-			Margen: margen === null ? "—" : formatMoney(margen),
-			StockActual: formatCell(Number(producto.cantidad_stock ?? 0)),
-			StockMinimo: formatCell(Number(producto.stock_minimo ?? 0)),
-			Estado: estadoParts.join(" | "),
-			Ventas30d: summary ? formatCell(summary.last30DaysUnitsSold) : "—",
-		}
-	})
-
-const formatDateStamp = () =>
-	new Date()
-		.toISOString()
-		.replace(/:/g, "-")
-		.replace("T", "_")
-		.slice(0, 16)
-
 const useFloatingMenu = () => {
 	const [open, setOpen] = useState(false)
 	const ref = useRef<HTMLDivElement | null>(null)
@@ -449,11 +371,6 @@ export default function ProductsPage() {
 			return DEFAULT_PAGE_SIZE
 		}
 	})
-	const handleChangePageSize = (next: number) => {
-		if (!(PAGE_SIZE_OPTIONS as readonly number[]).includes(next)) return
-		setPageSize(next as PageSizeOption)
-		setCurrentPage(1)
-	}
 	const [batchRows, setBatchRows] = useState<BatchProductRow[]>(() => [createBlankBatchRow()])
 	const [batchRowSaveErrors, setBatchRowSaveErrors] = useState<Record<string, string>>({})
 	const [dialogExtraTakenCodes, setDialogExtraTakenCodes] = useState<string[]>([])
@@ -474,19 +391,7 @@ export default function ProductsPage() {
 	const [filters, setFilters] = useState<ProductsFilters>(() => ({ ...defaultFilters }))
 	const [filtersDraft, setFiltersDraft] = useState<ProductsFilters>(filters)
 	const [filtersOpen, setFiltersOpen] = useState(false)
-	const [viewMode, setViewMode] = useState<ProductsViewMode>(() => {
-		try {
-			const stored = window.localStorage.getItem("products:view")
-			return stored === "table" || stored === "cards" ? stored : "cards"
-		} catch {
-			return "cards"
-		}
-	})
-	const [exportDialogOpen, setExportDialogOpen] = useState(false)
-	const [exportScope, setExportScope] = useState<ExportScope>("page")
-	const [exportFormat, setExportFormat] = useState<"csv" | "xlsx" | "pdf">("csv")
-	const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done" | "error">("idle")
-	const [exportError, setExportError] = useState<string | null>(null)
+
 	const [importState, setImportState] = useState<ImportState | null>(null)
 	const [importError, setImportError] = useState<string | null>(null)
 	const [importSubmitting, setImportSubmitting] = useState(false)
@@ -533,57 +438,61 @@ export default function ProductsPage() {
 		form.reset(defaultValues)
 	}
 
+	const deferHeavy = (cb: () => void) => {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(cb)
+		})
+	}
+
 	const openCreate = (mode: ModalMode = "single") => {
-		setEditingProduct(null)
-		setFormError(null)
-		setBatchSubmitting(false)
-		setBatchRows([createBlankBatchRow()])
-		setBatchRowSaveErrors({})
-		setDialogExtraTakenCodes([])
-		setModalMode(mode)
-		setImportState(null)
-		setImportError(null)
-		setUploadedPreview(null)
-		setImageMode("url")
-		form.reset(defaultValues)
+		// Abre rápido el modal y difiere el trabajo pesado
 		setDialogOpen(true)
+		deferHeavy(() => {
+			setEditingProduct(null)
+			setFormError(null)
+			setBatchSubmitting(false)
+			setBatchRows([createBlankBatchRow()])
+			setBatchRowSaveErrors({})
+			setDialogExtraTakenCodes([])
+			setModalMode(mode)
+			setImportState(null)
+			setImportError(null)
+			setUploadedPreview(null)
+			setImageMode("url")
+			form.reset(defaultValues)
+		})
 	}
 
 	const openEdit = (producto: ProductoRecord) => {
 		const cachedImage = imagenesQuery.data?.[producto.id_producto] ?? ""
 		const inferredCategory = inferCategoryFromCode(producto.codigo_producto)
-		setEditingProduct(producto)
-		setFormError(null)
-		setModalMode("single")
-		setUploadedPreview(cachedImage?.startsWith("data:") ? cachedImage : null)
-		setImageMode(cachedImage?.startsWith("data:") ? "upload" : "url")
-		form.reset({
-			categoria: inferredCategory ?? "",
-			codigo_producto: producto.codigo_producto,
-			nombre_producto: producto.nombre_producto,
-			descripcion: producto.descripcion ?? "",
-			imagen_url: cachedImage?.startsWith("data:") ? "" : cachedImage ?? "",
-			precio_compra: String(producto.precio_compra ?? 0),
-			precio_venta: String(producto.precio_venta ?? 0),
-			cantidad_stock: String(producto.cantidad_stock ?? 0),
-			stock_minimo: String(producto.stock_minimo ?? 0),
-			id_proveedor: producto.id_proveedor ? String(producto.id_proveedor) : "",
-		})
 		setDialogOpen(true)
+		// Define estado clave rápido y difiere el resto
+		setEditingProduct(producto)
+		deferHeavy(() => {
+			setFormError(null)
+			setModalMode("single")
+			setUploadedPreview(cachedImage?.startsWith("data:") ? cachedImage : null)
+			setImageMode(cachedImage?.startsWith("data:") ? "upload" : "url")
+			form.reset({
+				categoria: inferredCategory ?? "",
+				codigo_producto: producto.codigo_producto,
+				nombre_producto: producto.nombre_producto,
+				descripcion: producto.descripcion ?? "",
+				imagen_url: cachedImage?.startsWith("data:") ? "" : cachedImage ?? "",
+				precio_compra: String(producto.precio_compra ?? 0),
+				precio_venta: String(producto.precio_venta ?? 0),
+				cantidad_stock: String(producto.cantidad_stock ?? 0),
+				stock_minimo: String(producto.stock_minimo ?? 0),
+				id_proveedor: producto.id_proveedor ? String(producto.id_proveedor) : "",
+			})
+		})
 	}
 
 	const openDetail = (producto: ProductoRecord) => {
 		setDetailProduct(producto)
 		setDetailOpen(true)
 	}
-
-	useEffect(() => {
-		try {
-			window.localStorage.setItem("products:view", viewMode)
-		} catch {
-			// ignore
-		}
-	}, [viewMode])
 
 	useEffect(() => {
 		if (!isAdmin) return
@@ -613,6 +522,7 @@ export default function ProductsPage() {
 				return
 			}
 			queryClient.invalidateQueries({ queryKey: ["productos"] })
+			queryClient.invalidateQueries({ queryKey: ["productos-catalogo"] })
 			closeDialog()
 		},
 		onError: (error: unknown) => {
@@ -629,6 +539,7 @@ export default function ProductsPage() {
 				console.error("No se pudo limpiar la imagen del producto", error)
 			}
 			queryClient.invalidateQueries({ queryKey: ["productos"] })
+			queryClient.invalidateQueries({ queryKey: ["productos-catalogo"] })
 		},
 	})
 
@@ -636,7 +547,7 @@ export default function ProductsPage() {
 		detailProduct?.id_producto ?? 0,
 		isAdmin && detailOpen && Boolean(detailProduct?.id_producto)
 	)
-	const kardexQuery = useKardexQuery(isAdmin && detailOpen)
+	const kardexQuery = useKardexQuery(detailOpen ? detailProduct?.id_producto ?? null : null, isAdmin && detailOpen)
 
 	const productos = useMemo(() => productosQuery.data ?? [], [productosQuery.data])
 	const proveedores = useMemo(() => proveedoresQuery.data ?? [], [proveedoresQuery.data])
@@ -647,13 +558,6 @@ export default function ProductsPage() {
 		},
 		[queryClient]
 	)
-	const getCachedSalesSummary = useCallback(
-		(productId: number) => {
-			return queryClient.getQueryData<ProductSalesSummary>(["producto-ventas", productId]) ?? null
-		},
-		[queryClient]
-	)
-
 	useEffect(() => {
 		try {
 			window.localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(pageSize))
@@ -977,6 +881,7 @@ export default function ProductsPage() {
 
 		setBatchSubmitting(false)
 		queryClient.invalidateQueries({ queryKey: ["productos"] })
+		queryClient.invalidateQueries({ queryKey: ["productos-catalogo"] })
 		if (createdCodes.length > 0) {
 			setDialogExtraTakenCodes((prev) => {
 				const set = new Set(prev.map((code) => code.toUpperCase()))
@@ -1000,120 +905,89 @@ export default function ProductsPage() {
 
 	const normalizedSearch = useMemo(() => debouncedSearchInput.trim().toLowerCase(), [debouncedSearchInput])
 
+	const indexedProducts = useMemo(() => {
+		return productos.map((producto) => {
+			const codigoLower = producto.codigo_producto.toLowerCase()
+			const nombreLower = producto.nombre_producto.toLowerCase()
+			return {
+				producto,
+				codigoLower,
+				nombreLower,
+				categoria: inferCategoryFromCode(producto.codigo_producto),
+				stockStatus: resolveProductStockStatus(producto),
+				salesStatus: getCachedSalesStatus(producto.id_producto),
+				marginStatus: resolveMarginStatus(producto),
+				marginPercent: computeMarginPercent(producto.precio_compra, producto.precio_venta),
+			}
+		})
+	}, [productos, getCachedSalesStatus, salesQueriesVersion])
+
 	const filteredProducts = useMemo(() => {
-		let result = productos
+		let result = indexedProducts
 
 		if (normalizedSearch) {
-			result = result.filter(
-				(producto) =>
-					producto.nombre_producto.toLowerCase().includes(normalizedSearch) ||
-					producto.codigo_producto.toLowerCase().includes(normalizedSearch)
-			)
+			result = result.filter((entry) => entry.nombreLower.includes(normalizedSearch) || entry.codigoLower.includes(normalizedSearch))
 		}
 
 		if (filters.categoria !== "all") {
-			result = result.filter((producto) => inferCategoryFromCode(producto.codigo_producto) === filters.categoria)
+			result = result.filter((entry) => entry.categoria === filters.categoria)
 		}
 
 		if (filters.proveedorId !== "all") {
-			result = result.filter((producto) => producto.id_proveedor === filters.proveedorId)
+			result = result.filter((entry) => entry.producto.id_proveedor === filters.proveedorId)
 		}
 
-		result = result.filter((producto) => matchesStockFilter(producto, filters.stock))
+		if (filters.stock !== "all") {
+			result = result.filter((entry) => entry.stockStatus === filters.stock)
+		}
 
 		if (filters.sales !== "all") {
-			result = result.filter((producto) => matchesSalesFilter(getCachedSalesStatus(producto.id_producto), filters.sales))
+			result = result.filter((entry) => matchesSalesFilter(entry.salesStatus, filters.sales))
 		}
 
-		result = result.filter((producto) => matchesMarginFilter(producto, filters.margin))
+		if (filters.margin !== "all") {
+			result = result.filter((entry) => entry.marginStatus === filters.margin)
+		}
 
 		const sorted = [...result]
 		sorted.sort((a, b) => {
 			switch (filters.orden) {
 				case "name_asc":
-					return a.nombre_producto.localeCompare(b.nombre_producto, "es")
+					return a.producto.nombre_producto.localeCompare(b.producto.nombre_producto, "es")
 				case "name_desc":
-					return b.nombre_producto.localeCompare(a.nombre_producto, "es")
+					return b.producto.nombre_producto.localeCompare(a.producto.nombre_producto, "es")
 				case "stock_asc":
-					return a.cantidad_stock - b.cantidad_stock
+					return a.producto.cantidad_stock - b.producto.cantidad_stock
 				case "stock_desc":
-					return b.cantidad_stock - a.cantidad_stock
+					return b.producto.cantidad_stock - a.producto.cantidad_stock
 				case "price_asc":
-					return a.precio_venta - b.precio_venta
+					return a.producto.precio_venta - b.producto.precio_venta
 				case "price_desc":
-					return b.precio_venta - a.precio_venta
+					return b.producto.precio_venta - a.producto.precio_venta
 				case "margin_asc": {
-					const ma = computeMarginPercent(a.precio_compra, a.precio_venta)
-					const mb = computeMarginPercent(b.precio_compra, b.precio_venta)
-					const va = ma === null ? Number.POSITIVE_INFINITY : ma
-					const vb = mb === null ? Number.POSITIVE_INFINITY : mb
+					const va = a.marginPercent === null ? Number.POSITIVE_INFINITY : a.marginPercent
+					const vb = b.marginPercent === null ? Number.POSITIVE_INFINITY : b.marginPercent
 					return va - vb
 				}
 				case "margin_desc": {
-					const ma = computeMarginPercent(a.precio_compra, a.precio_venta)
-					const mb = computeMarginPercent(b.precio_compra, b.precio_venta)
-					const va = ma === null ? Number.NEGATIVE_INFINITY : ma
-					const vb = mb === null ? Number.NEGATIVE_INFINITY : mb
+					const va = a.marginPercent === null ? Number.NEGATIVE_INFINITY : a.marginPercent
+					const vb = b.marginPercent === null ? Number.NEGATIVE_INFINITY : b.marginPercent
 					return vb - va
 				}
 				case "status_stock":
-					return stockStatusWeight(resolveProductStockStatus(a)) - stockStatusWeight(resolveProductStockStatus(b))
+					return stockStatusWeight(a.stockStatus) - stockStatusWeight(b.stockStatus)
 				case "status_sales":
-					return salesStatusWeight(getCachedSalesStatus(a.id_producto)) - salesStatusWeight(getCachedSalesStatus(b.id_producto))
+					return salesStatusWeight(a.salesStatus) - salesStatusWeight(b.salesStatus)
 				case "status_margin":
-					return marginStatusWeight(resolveMarginStatus(a)) - marginStatusWeight(resolveMarginStatus(b))
+					return marginStatusWeight(a.marginStatus) - marginStatusWeight(b.marginStatus)
 				case "recent":
 				default:
-					return b.id_producto - a.id_producto
+					return b.producto.id_producto - a.producto.id_producto
 			}
 		})
 
-		return sorted
-	}, [productos, normalizedSearch, filters, getCachedSalesStatus, salesQueriesVersion])
-
-	const sortedAllProducts = useMemo(() => {
-		const sorted = [...productos]
-		sorted.sort((a, b) => {
-			switch (filters.orden) {
-				case "name_asc":
-					return a.nombre_producto.localeCompare(b.nombre_producto, "es")
-				case "name_desc":
-					return b.nombre_producto.localeCompare(a.nombre_producto, "es")
-				case "stock_asc":
-					return a.cantidad_stock - b.cantidad_stock
-				case "stock_desc":
-					return b.cantidad_stock - a.cantidad_stock
-				case "price_asc":
-					return a.precio_venta - b.precio_venta
-				case "price_desc":
-					return b.precio_venta - a.precio_venta
-				case "margin_asc": {
-					const ma = computeMarginPercent(a.precio_compra, a.precio_venta)
-					const mb = computeMarginPercent(b.precio_compra, b.precio_venta)
-					const va = ma === null ? Number.POSITIVE_INFINITY : ma
-					const vb = mb === null ? Number.POSITIVE_INFINITY : mb
-					return va - vb
-				}
-				case "margin_desc": {
-					const ma = computeMarginPercent(a.precio_compra, a.precio_venta)
-					const mb = computeMarginPercent(b.precio_compra, b.precio_venta)
-					const va = ma === null ? Number.NEGATIVE_INFINITY : ma
-					const vb = mb === null ? Number.NEGATIVE_INFINITY : mb
-					return vb - va
-				}
-				case "status_stock":
-					return stockStatusWeight(resolveProductStockStatus(a)) - stockStatusWeight(resolveProductStockStatus(b))
-				case "status_sales":
-					return salesStatusWeight(getCachedSalesStatus(a.id_producto)) - salesStatusWeight(getCachedSalesStatus(b.id_producto))
-				case "status_margin":
-					return marginStatusWeight(resolveMarginStatus(a)) - marginStatusWeight(resolveMarginStatus(b))
-				case "recent":
-				default:
-					return b.id_producto - a.id_producto
-			}
-		})
-		return sorted
-	}, [productos, filters.orden, getCachedSalesStatus, salesQueriesVersion])
+		return sorted.map((entry) => entry.producto)
+	}, [indexedProducts, normalizedSearch, filters])
 
 	const totalPages = useMemo(() => {
 		return Math.max(1, Math.ceil(filteredProducts.length / pageSize))
@@ -1146,9 +1020,9 @@ export default function ProductsPage() {
 
 	const openStockAdjust = (producto: ProductoRecord) => {
 		openEdit(producto)
-		window.setTimeout(() => {
+		deferHeavy(() => {
 			form.setFocus("cantidad_stock")
-		}, 50)
+		})
 	}
 
 	const ProductActionsMenu = ({ producto }: { producto: ProductoRecord }) => {
@@ -1162,7 +1036,8 @@ export default function ProductsPage() {
 						menu.setOpen((prev) => !prev)
 					}}
 					className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-					aria-label="Acciones"
+					aria-label="Menú"
+					title="Más acciones"
 				>
 					⋯
 				</button>
@@ -1172,12 +1047,12 @@ export default function ProductsPage() {
 							type="button"
 							onClick={(event) => {
 								event.stopPropagation()
-								navigate("/ventas")
+								openEdit(producto)
 								menu.setOpen(false)
 							}}
 							className="flex w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
 						>
-							Historial
+							Editar
 						</button>
 						<button
 							type="button"
@@ -1438,6 +1313,7 @@ export default function ProductsPage() {
 		}
 		setImportSubmitting(false)
 		queryClient.invalidateQueries({ queryKey: ["productos"] })
+		queryClient.invalidateQueries({ queryKey: ["productos-catalogo"] })
 		setImportError(
 			failed > 0
 				? `Importación finalizada. ${success} productos guardados, ${failed} con errores.`
@@ -1446,48 +1322,6 @@ export default function ProductsPage() {
 		if (failed === 0) {
 			setImportState(null)
 			closeDialog()
-		}
-	}
-
-	const getSourceForExport = async (scope: ExportScope) => {
-		if (scope === "page") return displayedProducts
-		if (scope === "filtered") return filteredProducts
-		// all
-		if (productosQuery.data) return sortedAllProducts
-		const fetched = await queryClient.fetchQuery({ queryKey: productsQueryKey, queryFn: () => productClient.list() })
-		return fetched ?? []
-	}
-
-	const runExport = async (): Promise<boolean> => {
-		setExportError(null)
-		setExportStatus("exporting")
-		try {
-			const source = await getSourceForExport(exportScope)
-			const rows = buildExportRows(source, (id) => getCachedSalesSummary(id))
-			const fileRows = rows as unknown as ExportFileRow[]
-			if (fileRows.length === 0) {
-				setExportError("No hay productos para exportar")
-				setExportStatus("idle")
-				return false
-			}
-			const filenameBase = `productos_${exportScope}_${formatDateStamp()}`
-			switch (exportFormat) {
-				case "csv":
-					exportToCSV(fileRows, filenameBase)
-					break
-				case "xlsx":
-					exportToXLSX(fileRows, filenameBase)
-					break
-				case "pdf":
-					exportToPDF(fileRows, filenameBase)
-					break
-			}
-			setExportStatus("done")
-			return true
-		} catch (error) {
-			setExportError(getApiErrorMessage(error, "No se pudo exportar"))
-			setExportStatus("error")
-			return false
 		}
 	}
 
@@ -1509,7 +1343,7 @@ export default function ProductsPage() {
 		<div className="space-y-6">
 			<section
 				aria-labelledby="productos-encabezado"
-				className="rounded-3xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-6 shadow-sm"
+				className="rounded-3xl border border-slate-200 bg-white p-6"
 			>
 				<div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
 					<div>
@@ -1519,18 +1353,16 @@ export default function ProductsPage() {
 						<h1 className="mt-1 text-3xl font-semibold text-slate-900">Productos</h1>
 						<p className="mt-1 text-sm text-slate-500">Visualiza, crea y actualiza tu catálogo centralizado.</p>
 					</div>
-					<div className="flex flex-col items-stretch gap-2 sm:items-end">
-						<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones rápidas</p>
-						<div className="flex flex-wrap items-center justify-end gap-2">
-							<button
-								onClick={() => openCreate("single")}
-								disabled={noProveedoresDisponibles || proveedoresNoDisponibles}
-								className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-							>
-								<Plus className="h-4 w-4" />
-								Registrar productos
-							</button>
-					</div>
+					<div className="flex flex-col items-center gap-2">
+						<p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones rápidas</p>
+						<button
+							onClick={() => openCreate("single")}
+							disabled={noProveedoresDisponibles || proveedoresNoDisponibles}
+							className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+						>
+							<Plus className="h-4 w-4" />
+							Registrar productos
+						</button>
 						{proveedoresNoDisponibles ? (
 							<p className="text-xs text-amber-700">No se pudieron cargar proveedores. Intenta nuevamente.</p>
 						) : noProveedoresDisponibles ? (
@@ -1632,274 +1464,67 @@ export default function ProductsPage() {
 					searchInput={searchInput}
 					onSearchInputChange={setSearchInput}
 					onOpenFilters={openFilters}
-					viewMode={viewMode}
-					onChangeViewMode={setViewMode}
-					pageSize={pageSize}
-					onChangePageSize={handleChangePageSize}
-					onOpenCreate={() => openCreate("single")}
-					createDisabled={noProveedoresDisponibles}
-					onOpenExport={() => {
-						setExportStatus("idle")
-						setExportError(null)
-						setExportDialogOpen(true)
-					}}
 					filterChips={filterChips}
 					onRemoveChip={removeChip}
 					onClearAllFilters={clearAllFilters}
 				/>
 
-				<Dialog
-					open={exportDialogOpen}
-					onOpenChange={(open) => {
-						// Bloqueado: solo cerrar con botones del modal.
-						if (!open) return
-						setExportDialogOpen(true)
-					}}
-				>
-					<DialogContent className="max-w-3xl" disableOutsideClose hideCloseButton>
-						<DialogHeader>
-							<DialogTitle>Exportar productos</DialogTitle>
-							<DialogDescription>Selecciona el alcance y el formato de exportación.</DialogDescription>
-						</DialogHeader>
-
-						<div className="grid gap-6 md:grid-cols-2">
-							<div className="grid gap-3">
-								<p className="text-sm font-semibold text-slate-900">Alcance</p>
-								<div className="grid gap-2">
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-scope"
-											checked={exportScope === "page"}
-											onChange={() => setExportScope("page")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">Página actual</p>
-											<p className="text-xs text-slate-500">Lo visible en pantalla según la paginación actual.</p>
-										</div>
-									</label>
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-scope"
-											checked={exportScope === "filtered"}
-											onChange={() => setExportScope("filtered")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">Filtrados</p>
-											<p className="text-xs text-slate-500">Aplica búsqueda + filtros + orden, sin importar página.</p>
-										</div>
-									</label>
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-scope"
-											checked={exportScope === "all"}
-											onChange={() => setExportScope("all")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">Todo</p>
-											<p className="text-xs text-slate-500">Ignora filtros y exporta todos los productos.</p>
-										</div>
-									</label>
-								</div>
-							</div>
-
-							<div className="grid gap-3">
-								<p className="text-sm font-semibold text-slate-900">Formato</p>
-								<div className="grid gap-2">
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-format"
-											checked={exportFormat === "csv"}
-											onChange={() => setExportFormat("csv")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">CSV</p>
-											<p className="text-xs text-slate-500">Compatible con Excel (separador ;).</p>
-										</div>
-									</label>
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-format"
-											checked={exportFormat === "xlsx"}
-											onChange={() => setExportFormat("xlsx")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">Excel (.xlsx)</p>
-											<p className="text-xs text-slate-500">Hoja "Productos" con columnas formateadas.</p>
-										</div>
-									</label>
-									<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-										<input
-											type="radio"
-											name="export-format"
-											checked={exportFormat === "pdf"}
-											onChange={() => setExportFormat("pdf")}
-											className="mt-1"
-										/>
-										<div>
-											<p className="text-sm font-semibold text-slate-900">PDF</p>
-											<p className="text-xs text-slate-500">Tabla en PDF (landscape).</p>
-										</div>
-									</label>
-								</div>
-							</div>
-						</div>
-
-						{exportError && (
-							<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{exportError}</div>
-						)}
-
-						<DialogFooter>
-							<button
-								type="button"
-								onClick={() => {
-									if (exportStatus === "exporting") return
-									setExportDialogOpen(false)
-								}}
-								disabled={exportStatus === "exporting"}
-								className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								Cancelar
-							</button>
-							<button
-								type="button"
-								onClick={async () => {
-									const ok = await runExport()
-									if (ok) setExportDialogOpen(false)
-								}}
-								disabled={exportStatus === "exporting"}
-								className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{exportStatus === "exporting" ? "Exportando…" : exportStatus === "done" ? "Listo" : "Aceptar"}
-							</button>
-						</DialogFooter>
-					</DialogContent>
-				</Dialog>
-				<div className="hidden px-6 py-4">
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-						<div>
-							<p id="productos-listado" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-								Listado
-							</p>
-							<p className="mt-1 text-sm font-semibold text-slate-900">Productos</p>
-							<p className="text-xs text-slate-500">
-								Mostrando {startItem}-{endItem} de {filteredProducts.length} resultados.
-							</p>
-						</div>
-
-						<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-							<input
-								value={searchInput}
-								onChange={(event) => setSearchInput(event.target.value)}
-								placeholder="Buscar por código o nombre"
-								className="w-full rounded-2xl border border-slate-200 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-72"
-							/>
-
-							<button
-								type="button"
-								onClick={openFilters}
-								className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-							>
-								Filtros
-							</button>
-
-							<div className="inline-flex overflow-hidden rounded-2xl border border-slate-200 bg-white">
-								<button
-									type="button"
-									onClick={() => setViewMode("table")}
-									className={
-										"px-4 py-2.5 text-sm font-semibold transition " +
-										(viewMode === "table" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50")
-									}
-								>
-									Tabla
-								</button>
-								<button
-									type="button"
-									onClick={() => setViewMode("cards")}
-									className={
-										"px-4 py-2.5 text-sm font-semibold transition " +
-										(viewMode === "cards" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-50")
-									}
-								>
-									Cards
-								</button>
-							</div>
-
-							<button
-								type="button"
-								onClick={() => openCreate("single")}
-								disabled={noProveedoresDisponibles}
-								className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-							>
-								Registrar
-							</button>
-
-							<button
-								type="button"
-								onClick={() => {
-								setExportStatus("idle")
-								setExportError(null)
-								setExportDialogOpen(true)
-							}}
-								className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-							>
-								Exportar
-							</button>
-						</div>
-					</div>
-
-					{filterChips.length > 0 && (
-						<div className="mt-4 flex flex-wrap items-center gap-2">
-							{filterChips.map((chip) => (
-								<span
-									key={chip.key}
-									className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700"
-								>
-									{chip.label}
-									<button
-										type="button"
-										onClick={() => removeChip(chip.key)}
-										className="rounded-full px-1 text-slate-500 hover:text-slate-900"
-										aria-label="Remover filtro"
-									>
-										×
-									</button>
-								</span>
-							))}
-							<button
-								type="button"
-								onClick={clearAllFilters}
-								className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-							>
-								Limpiar todo
-							</button>
-						</div>
-					)}
-				</div>
-
 				<div className="px-6 pb-6">
 
-					{viewMode === "cards" ? (
-						<div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-							{displayedProducts.map((producto) => {
-								const stockStatus = resolveProductStockStatus(producto)
-								const stockStatusText = productStockStatusLabel(stockStatus)
-								const salesStatus = getCachedSalesStatus(producto.id_producto)
-								const marginStatus = resolveMarginStatus(producto)
-								const inferred = inferCategoryFromCode(producto.codigo_producto)
-								const purchaseDisplay = producto.precio_compra > 0 ? currency.format(producto.precio_compra) : "—"
-								const margin = computeMargin(producto.precio_compra, producto.precio_venta)
-								const stockStatusClass =
+				<div className="mt-4 overflow-x-auto">
+					<table className="min-w-[980px] w-full text-sm">
+						<thead className="sticky top-0 bg-slate-50">
+							<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+								<th className="py-3 pr-4">Código</th>
+								<th className="py-3 pr-4">Producto</th>
+								<th className="py-3 pr-4">Proveedor</th>
+								<th className="py-3 pr-4">Precios</th>
+								<th className="py-3 pr-4">Stock</th>
+								<th className="py-3 pr-4">Detalle</th>
+								<th className="py-3 text-right">Acciones</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-200">
+								{productosQuery.isLoading && productosQuery.data === undefined
+									? Array.from({ length: Math.min(pageSize, 8) }).map((_, index) => (
+										<tr key={`productos-skeleton-${index}`} className="animate-pulse">
+											<td className="py-3 pr-4 align-top">
+												<div className="flex flex-wrap items-center gap-2">
+													<div className="h-6 w-24 rounded-full bg-slate-100" />
+													<div className="h-6 w-12 rounded-full bg-slate-100" />
+												</div>
+											</td>
+											<td className="py-3 pr-4 align-top">
+												<div className="h-4 w-48 rounded bg-slate-100" />
+												<div className="mt-2 h-3 w-64 rounded bg-slate-100" />
+											</td>
+											<td className="py-3 pr-4 align-top">
+												<div className="h-4 w-32 rounded bg-slate-100" />
+											</td>
+											<td className="py-3 pr-4 align-top">
+												<div className="h-3 w-40 rounded bg-slate-100" />
+												<div className="mt-2 h-3 w-52 rounded bg-slate-100" />
+												<div className="mt-2 h-3 w-36 rounded bg-slate-100" />
+											</td>
+											<td className="py-3 pr-4 align-top">
+												<div className="h-6 w-24 rounded-full bg-slate-100" />
+											</td>
+											<td className="py-3 pr-4 align-top">
+												<div className="h-10 w-20 rounded-xl bg-slate-100" />
+											</td>
+											<td className="py-3 pr-4 align-top text-right">
+												<div className="ml-auto h-10 w-10 rounded-xl bg-slate-100" />
+											</td>
+										</tr>
+									))
+									: displayedProducts.map((producto) => {
+										const stockStatus = resolveProductStockStatus(producto)
+										const stockStatusText = productStockStatusLabel(stockStatus)
+										const inferred = inferCategoryFromCode(producto.codigo_producto)
+										const costo = producto.costo ?? (producto.precio_compra > 0 ? producto.precio_compra : null)
+										const purchaseDisplay = costo === null ? "—" : currency.format(costo)
+										const margin = producto.margen ?? (costo === null ? null : computeMargin(costo, producto.precio_venta))
+										const stockStatusClass =
 									stockStatus === "SIN_STOCK"
 										? "bg-slate-100 text-slate-700"
 										: stockStatus === "CRITICAL"
@@ -1907,257 +1532,114 @@ export default function ProductsPage() {
 											: stockStatus === "LOW"
 												? "bg-amber-50 text-amber-700"
 												: "bg-emerald-50 text-emerald-700"
-								const salesStatusClass =
-									salesStatus === null
-										? "bg-slate-100 text-slate-700"
-										: salesStatus === "NO_SALES_30D"
-											? "bg-amber-50 text-amber-700"
-											: "bg-emerald-50 text-emerald-700"
-								const marginStatusClass =
-									marginStatus === "NO_COST"
-										? "bg-slate-100 text-slate-700"
-										: marginStatus === "LOW_MARGIN"
-											? "bg-amber-50 text-amber-700"
-											: "bg-emerald-50 text-emerald-700"
 
 								return (
-									<div
+									<tr
 										key={producto.id_producto}
-										role="button"
-										tabIndex={0}
-										aria-label={`Ver detalle de ${producto.nombre_producto}`}
-										onClick={() => openDetail(producto)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" || event.key === " ") {
-												event.preventDefault()
-												openDetail(producto)
-											}
-									}}
-										className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+										className="hover:bg-slate-50"
 									>
-										<div className="flex items-start justify-between gap-3">
-											<div className="min-w-0">
-												<div className="flex flex-wrap items-center gap-2">
-													<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-														{producto.codigo_producto}
-													</span>
-													<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-														{(inferred ?? "N/D").toUpperCase()}
-													</span>
-													<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>{stockStatusText}</span>
-													<span className={`rounded-full px-3 py-1 text-xs font-semibold ${salesStatusClass}`}>
-														{salesStatus ? salesStatusLabel(salesStatus) : "Ventas: —"}
-													</span>
-													<span className={`rounded-full px-3 py-1 text-xs font-semibold ${marginStatusClass}`}>{marginStatusLabel(marginStatus)}</span>
-												</div>
-												<p className="mt-2 truncate text-sm font-semibold text-slate-900">{producto.nombre_producto}</p>
-												{producto.descripcion && <p className="mt-1 line-clamp-1 text-xs text-slate-500">{producto.descripcion}</p>}
-											</div>
-											<div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-												<div className="flex items-center gap-1">
-													<button
-														type="button"
-														onClick={() => openEdit(producto)}
-														className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-														aria-label="Editar"
-													>
-														<Pencil className="h-4 w-4" />
-													</button>
-													<button
-														type="button"
-														onClick={() => openStockAdjust(producto)}
-														className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-														aria-label="Ajustar stock"
-													>
-														<Boxes className="h-4 w-4" />
-													</button>
-													<ProductActionsMenu producto={producto} />
-												</div>
-											</div>
-										</div>
-
-										<div className="mt-4 grid grid-cols-2 gap-3">
-											<div className="text-sm text-slate-700">
-												<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proveedor</p>
-												<p className="mt-1 truncate font-semibold text-slate-900">
-													{producto.proveedor?.nombre_proveedor ?? "Sin proveedor"}
-												</p>
-											</div>
-											<div className="text-sm text-slate-700">
-												<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Precios</p>
-												<p className="mt-1 font-semibold text-slate-900">Venta: {currency.format(producto.precio_venta)}</p>
-												<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-													<span>Compra: {purchaseDisplay}</span>
-													{producto.precio_compra > 0 ? null : (
-														<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-															Sin costo
-														</span>
-													)}
-												</p>
-												<p className="mt-1 text-xs text-slate-500">Margen: {margin === null ? "—" : currency.format(margin)}</p>
-											</div>
-										</div>
-
-										<div className="mt-3 text-sm">
-											<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stock</p>
-											<div className="mt-1 flex flex-wrap items-center gap-2">
-												<span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>
-													<Boxes className="h-3.5 w-3.5" />
-													{producto.cantidad_stock} uds
-												</span>
+										<td className="py-3 pr-4 align-top">
+											<div className="flex flex-wrap items-center gap-2">
 												<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-													Mín: {producto.stock_minimo}
+													{producto.codigo_producto}
+												</span>
+												<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+													{(inferred ?? "N/D").toUpperCase()}
 												</span>
 											</div>
-										</div>
-									</div>
+										</td>
+										<td className="py-3 pr-4 align-top">
+											<p className="text-sm font-semibold text-slate-900">{producto.nombre_producto}</p>
+											{producto.descripcion && <p className="mt-1 line-clamp-1 text-xs text-slate-500">{producto.descripcion}</p>}
+										</td>
+										<td className="py-3 pr-4 align-top text-sm font-semibold text-slate-900">
+											{producto.proveedor_nombre ?? producto.proveedor?.nombre_proveedor ?? "Sin proveedor"}
+										</td>
+										<td className="py-3 pr-4 align-top">
+											<p className="text-xs font-semibold text-slate-900">Venta: {currency.format(producto.precio_venta)}</p>
+											<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+												<span>Compra: {purchaseDisplay}</span>
+												{costo !== null ? null : (
+													<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+														Sin costo
+													</span>
+												)}
+											</p>
+											<p className="mt-1 text-xs text-slate-500">Margen: {margin === null ? "—" : currency.format(margin)}</p>
+										</td>
+										<td className="py-3 pr-4 align-top">
+											<div className="flex flex-wrap items-center gap-2">
+												<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>{stockStatusText}</span>
+											</div>
+										</td>
+										<td className="py-3 pr-4 align-top" onClick={(e) => e.stopPropagation()}>
+											<button
+												type="button"
+												onClick={() => openDetail(producto)}
+												className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+												aria-label="Ver"
+											>
+												<Eye className="mr-1 inline h-4 w-4" />
+												Ver
+											</button>
+										</td>
+										<td className="py-3 pr-4 align-top text-right" onClick={(e) => e.stopPropagation()}>
+											<div className="inline-flex items-center justify-end">
+												<ProductActionsMenu producto={producto} />
+											</div>
+										</td>
+									</tr>
 								)
 							})}
-						</div>
-					) : (
-						<div className="mt-4 overflow-x-auto">
-							<table className="min-w-[980px] w-full text-sm">
-								<thead className="sticky top-0 bg-white">
-									<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-										<th className="py-3 pr-4">Código</th>
-										<th className="py-3 pr-4">Producto</th>
-										<th className="py-3 pr-4">Proveedor</th>
-										<th className="py-3 pr-4">Precios</th>
-										<th className="py-3 pr-4">Stock</th>
-										<th className="py-3 text-right">Acciones</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-slate-200">
-									{displayedProducts.map((producto) => {
-										const stockStatus = resolveProductStockStatus(producto)
-										const stockStatusText = productStockStatusLabel(stockStatus)
-										const salesStatus = getCachedSalesStatus(producto.id_producto)
-										const marginStatus = resolveMarginStatus(producto)
-										const inferred = inferCategoryFromCode(producto.codigo_producto)
-										const purchaseDisplay = producto.precio_compra > 0 ? currency.format(producto.precio_compra) : "—"
-										const margin = computeMargin(producto.precio_compra, producto.precio_venta)
-										const stockStatusClass =
-											stockStatus === "SIN_STOCK"
-												? "bg-slate-100 text-slate-700"
-												: stockStatus === "CRITICAL"
-													? "bg-red-50 text-red-700"
-													: stockStatus === "LOW"
-														? "bg-amber-50 text-amber-700"
-														: "bg-emerald-50 text-emerald-700"
-										const salesStatusClass =
-											salesStatus === null
-												? "bg-slate-100 text-slate-700"
-												: salesStatus === "NO_SALES_30D"
-													? "bg-amber-50 text-amber-700"
-													: "bg-emerald-50 text-emerald-700"
-										const marginStatusClass =
-											marginStatus === "NO_COST"
-												? "bg-slate-100 text-slate-700"
-												: marginStatus === "LOW_MARGIN"
-													? "bg-amber-50 text-amber-700"
-													: "bg-emerald-50 text-emerald-700"
+						</tbody>
+					</table>
+				</div>
 
-										return (
-											<tr
-												key={producto.id_producto}
-												className="cursor-pointer hover:bg-slate-50"
-												onClick={() => openDetail(producto)}
-											>
-												<td className="py-3 pr-4 align-top">
-													<div className="flex flex-wrap items-center gap-2">
-														<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-															{producto.codigo_producto}
-														</span>
-														<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-															{(inferred ?? "N/D").toUpperCase()}
-														</span>
-													</div>
-												</td>
-												<td className="py-3 pr-4 align-top">
-													<p className="text-sm font-semibold text-slate-900">{producto.nombre_producto}</p>
-													{producto.descripcion && <p className="mt-1 line-clamp-1 text-xs text-slate-500">{producto.descripcion}</p>}
-												</td>
-												<td className="py-3 pr-4 align-top text-sm font-semibold text-slate-900">
-													{producto.proveedor?.nombre_proveedor ?? "Sin proveedor"}
-												</td>
-												<td className="py-3 pr-4 align-top">
-													<p className="text-xs font-semibold text-slate-900">Venta: {currency.format(producto.precio_venta)}</p>
-																<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-																	<span>Compra: {purchaseDisplay}</span>
-																	{producto.precio_compra > 0 ? null : (
-																		<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-																			Sin costo
-																		</span>
-																	)}
-																</p>
-																<p className="mt-1 text-xs text-slate-500">Margen: {margin === null ? "—" : currency.format(margin)}</p>
-												</td>
-												<td className="py-3 pr-4 align-top">
-													<div className="flex flex-wrap items-center gap-2">
-														<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>{stockStatusText}</span>
-														<span className={`rounded-full px-3 py-1 text-xs font-semibold ${salesStatusClass}`}>
-															{salesStatus ? salesStatusLabel(salesStatus) : "Ventas: —"}
-														</span>
-														<span className={`rounded-full px-3 py-1 text-xs font-semibold ${marginStatusClass}`}>{marginStatusLabel(marginStatus)}</span>
-														<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-															{producto.cantidad_stock} / {producto.stock_minimo}
-														</span>
-													</div>
-												</td>
-													<td className="py-3 align-top text-right" onClick={(e) => e.stopPropagation()}>
-														<div className="inline-flex items-center justify-end gap-1">
-															<button
-																type="button"
-																onClick={() => openEdit(producto)}
-																className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-																aria-label="Editar"
-															>
-																<Pencil className="h-4 w-4" />
-															</button>
-															<button
-																type="button"
-																onClick={() => openStockAdjust(producto)}
-																className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-																aria-label="Ajustar stock"
-															>
-																<Boxes className="h-4 w-4" />
-															</button>
-															<ProductActionsMenu producto={producto} />
-														</div>
-													</td>
-											</tr>
-										)
-									})}
-								</tbody>
-							</table>
-						</div>
-					)}
+			{totalPages > 1 && (
+				<div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
+					<div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
 
-					{totalPages > 1 && (
-						<div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-							<p className="text-xs text-slate-500">
-								Página {currentPage} de {totalPages}
-							</p>
-							<div className="flex items-center gap-2">
-								<button
-									type="button"
-									onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-									disabled={currentPage <= 1}
-									className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									Anterior
-								</button>
-								<button
-									type="button"
-									onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-									disabled={currentPage >= totalPages}
-									className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									Siguiente
-								</button>
-							</div>
-						</div>
-					)}
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+							disabled={currentPage <= 1}
+							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Anterior
+						</button>
+						<span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
+							{currentPage}
+						</span>
+						<button
+							type="button"
+							onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+							disabled={currentPage >= totalPages}
+							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Siguiente
+						</button>
+					</div>
+
+					<div className="inline-flex items-center gap-3">
+						<label htmlFor="products-page-size-bottom" className="text-sm font-semibold text-slate-800">
+							Por página
+						</label>
+						<select
+							id="products-page-size-bottom"
+							value={String(pageSize)}
+							onChange={(event) => setPageSize(Number(event.target.value) as PageSizeOption)}
+							className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+						>
+							{PAGE_SIZE_OPTIONS.map((opt) => (
+								<option key={opt} value={opt}>
+									{opt}
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
+			)}
 				</div>
 
 				{productosQuery.isLoading && (
@@ -2319,7 +1801,7 @@ export default function ProductsPage() {
 				}}
 			>
 				<DialogContent
-					className="w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl"
+					className="dialog-content w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl"
 					hideCloseButton
 					disableOutsideClose
 				>
@@ -2797,7 +2279,13 @@ export default function ProductsPage() {
 											</button>
 											<button
 												type="button"
-												onClick={handleBatchSubmit}
+												onClick={() => {
+													requestAnimationFrame(() => {
+														requestAnimationFrame(() => {
+															void handleBatchSubmit()
+														})
+													})
+												}}
 												className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
 												disabled={batchSubmitting || batchReadyCount === 0 || noProveedoresDisponibles}
 											>
@@ -2928,7 +2416,13 @@ export default function ProductsPage() {
 									</button>
 									<button
 										type="button"
-										onClick={handleImportConfirm}
+										onClick={() => {
+											requestAnimationFrame(() => {
+												requestAnimationFrame(() => {
+													void handleImportConfirm()
+												})
+											})
+										}}
 										className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
 										disabled={importSubmitting || validImportRows.length === 0}
 									>
@@ -2994,7 +2488,7 @@ export default function ProductsPage() {
 					}
 				}}
 			>
-				<DialogContent className="max-w-md" hideCloseButton>
+				<DialogContent className="dialog-content max-w-md" hideCloseButton>
 					<DialogHeader>
 						<DialogTitle>Confirmar eliminación</DialogTitle>
 						<DialogDescription>

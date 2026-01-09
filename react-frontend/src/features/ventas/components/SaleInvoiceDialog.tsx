@@ -1,10 +1,11 @@
 "use client"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
-import { Printer, Download, Mail, X } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../../components/ui/dialog"
+import { Printer, X } from "lucide-react"
 import { useState, useEffect } from "react"
-import { SaleInvoicePrintable } from "./SaleInvoicePrintable"
-import { downloadSalePdf } from "../utils/salePdf"
+import { InvoicePrint } from "./InvoicePrint"
+import { SaleInvoicePreview } from "./SaleInvoicePreview"
+import { PrintRootPortal } from "./PrintRootPortal"
 import { salesService, type VentaDetailRecord } from "../../../services/salesService"
 
 type Props = {
@@ -46,31 +47,26 @@ export function SaleInvoiceDialog({ saleId, open, onClose }: Props) {
   }, [open, saleId])
 
   const handlePrint = () => {
-    window.print()
-  }
-
-  const handleDownloadPdf = () => {
-    if (sale) {
-      downloadSalePdf(sale)
+    const count = document.querySelectorAll("#invoice-print .printable-invoice").length
+    console.log("printable count", count)
+    if (count !== 1) {
+      console.error("Error: printable-invoice duplicado", count)
+      return
     }
-  }
-
-  const handleEmail = () => {
-    if (!sale) return
-    
-    const subject = encodeURIComponent(`Factura #${sale.numero_factura}`)
-    const body = encodeURIComponent(
-      `Adjunto encontrarás la factura de tu compra.\n\nTotal: Bs ${sale.total}\nFecha: ${new Date(sale.fecha_factura).toLocaleDateString()}`
-    )
-    window.location.href = `mailto:?subject=${subject}&body=${body}`
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print()
+      })
+    })
   }
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" hideCloseButton>
+      <DialogContent className="dialog-content max-w-4xl max-h-[90vh] overflow-y-auto" hideCloseButton>
         <DialogHeader className="no-print">
           <div className="flex items-center justify-between">
             <DialogTitle>Factura de venta</DialogTitle>
+            <DialogDescription className="sr-only">Vista de factura para impresión</DialogDescription>
             <button
               type="button"
               onClick={onClose}
@@ -96,8 +92,14 @@ export function SaleInvoiceDialog({ saleId, open, onClose }: Props) {
 
           {!isLoading && !error && sale && (
             <>
-              <div className="mb-6">
-                <SaleInvoicePrintable sale={sale} />
+              {/* Renderizar en print-root para impresión */}
+              <PrintRootPortal>
+                <InvoicePrint sale={sale} />
+              </PrintRootPortal>
+
+              {/* Vista en pantalla (sin clase printable) */}
+              <div className="mb-6 overflow-x-auto">
+                <SaleInvoicePreview sale={sale} />
               </div>
 
               <div className="flex gap-3 justify-end border-t pt-4 no-print">
@@ -108,22 +110,6 @@ export function SaleInvoiceDialog({ saleId, open, onClose }: Props) {
                 >
                   <Printer className="h-4 w-4" />
                   Imprimir
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadPdf}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Download className="h-4 w-4" />
-                  Descargar PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={handleEmail}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  <Mail className="h-4 w-4" />
-                  Enviar por correo
                 </button>
               </div>
             </>

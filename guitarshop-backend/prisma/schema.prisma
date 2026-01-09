@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
+  binaryTargets = ["native", "windows", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -50,6 +51,7 @@ model credito {
   id_factura        Int
   monto_total       Decimal         @db.Decimal(12, 2)
   saldo_pendiente   Decimal         @db.Decimal(12, 2)
+  estado_credito    String          @default("ACTIVO") @db.VarChar(20)
   fecha_inicio      DateTime        @db.Date
   fecha_fin         DateTime?       @db.Date
   id_estado         Int             @default(1)

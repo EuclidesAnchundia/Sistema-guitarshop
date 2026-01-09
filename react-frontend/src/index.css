@@ -72,6 +72,19 @@ body {
   }
 }
 
+/* Reducir animaciones/transiciones en diálogos para evitar reflows costosos */
+@media (prefers-reduced-motion: reduce) {
+  .dialog-content,
+  [data-radix-popper-content-wrapper],
+  [role="dialog"],
+  [data-state="open"],
+  [data-state="closed"],
+  .dialog-overlay {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Utilidades globales para layout y componentes base. */
 .app-container {
   @apply mx-auto max-w-7xl px-6 py-8;
@@ -102,40 +115,110 @@ body {
 }
 
 /* ============================
-   ESTILOS DE IMPRESIÓN PARA NOTA DE ENTREGA
+   INVOICE PRINT - OCULTO EN PANTALLA
    ============================ */
+@media screen {
+  #invoice-print {
+    display: none !important;
+  }
+}
+
+/* ============================
+   ESTILOS DE IMPRESIÓN PROFESIONAL
+   ============================ */
+
+/* Forzar colores exactos en impresión */
+* {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
 @media print {
-  /* Ocultar todo el contenido de la página */
+  /* Configuración de página A4 */
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+
+  /* Fondo blanco forzado */
+  body {
+    background: white !important;
+  }
+
+  /* Reglas requeridas: ocultar TODO excepto #invoice-print */
   body * {
     visibility: hidden;
   }
 
-  /* Mostrar solo la factura */
-  .printable-invoice,
-  .printable-invoice * {
+  #invoice-print,
+  #invoice-print * {
     visibility: visible;
   }
 
-  /* Posicionar la factura en la esquina superior izquierda */
-  .printable-invoice {
+  /* Legibilidad: forzar texto oscuro en impresión */
+  #invoice-print,
+  #invoice-print * {
+    color: #000 !important;
+    -webkit-text-fill-color: #000 !important;
+  }
+
+  #invoice-print {
     position: absolute;
     left: 0;
     top: 0;
     width: 100%;
-    background: white;
-    margin: 0;
-    padding: 10mm 15mm;
+  }
+
+  /* Refuerzo para evitar páginas extra: sacar la app del flujo */
+  #root {
+    display: none !important;
+  }
+
+  /* Ajustes del contenedor de impresión */
+  #invoice-print {
+    display: block !important;
+    height: auto !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    transform: none !important;
+    overflow: visible !important;
+  }
+
+  #invoice-print > * {
+    width: 100% !important;
+    height: auto !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Asegurar que el documento impreso no tenga márgenes/padding externos */
+  .printable-invoice {
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: none !important;
+    page-break-before: avoid !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Remover transforms de Dialog/Radix que causan escala */
+  .dialog-content,
+  [data-radix-popper-content-wrapper],
+  [data-state="open"],
+  [role="dialog"] {
+    transform: none !important;
+    position: static !important;
   }
 
   /* Ocultar elementos con clase no-print */
   .no-print {
     display: none !important;
-  }
-
-  /* Configuración de página */
-  @page {
-    size: A4;
-    margin: 10mm 15mm;
+    visibility: hidden !important;
   }
 
   /* Asegurar que las tablas no se rompan mal */
@@ -159,11 +242,6 @@ body {
     border-radius: 0 !important;
   }
 }
-
-.btn-primary:hover {
-  background-color: var(--color-accent);
-}
-
 /* Enlaces */
 a {
   color: var(--color-primary);
@@ -206,30 +284,7 @@ p {
   }
 }
 
-@media print {
-  body {
-    background: #fff !important;
-  }
-
-  /* Oculta todo por defecto al imprimir, excepto la factura */
-  body * {
-    visibility: hidden;
-  }
-
-  .printable-invoice,
-  .printable-invoice * {
-    visibility: visible;
-  }
-
-  .printable-invoice {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    border: none !important;
-    box-shadow: none !important;
-  }
-}
+/* (El bloque de impresión alterno para .printable-invoice se consolidó arriba para evitar duplicados) */
 
 
 

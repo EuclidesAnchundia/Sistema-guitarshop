@@ -44,6 +44,13 @@ const facturaDetalleSelect = {
         select: {
           codigo_producto: true,
           nombre_producto: true,
+          id_proveedor: true,
+          proveedor: {
+            select: {
+              id_proveedor: true,
+              nombre_proveedor: true,
+            },
+          },
         },
       },
     },
@@ -127,7 +134,7 @@ export async function obtenerVentaPorId(id: number) {
 // CREAR VENTA / FACTURA
 // ==========================
 export async function crearVenta(data: {
-  id_cliente: number;
+  id_cliente: number | null;
   id_usuario: number; // viene del token
   forma_pago: "CONTADO" | "CREDITO";
   observacion?: string | null;
@@ -160,6 +167,28 @@ export async function crearVenta(data: {
 
   // 2) Lógica en transacción
   const resultado = await prisma.$transaction(async (tx) => {
+    // 2.0) Resolver cliente (Consumidor Final si no viene id_cliente)
+    let idCliente = data.id_cliente ?? 0;
+    if (!idCliente || idCliente <= 0) {
+      const consumidorCedula = "9999999999";
+      const consumidor = await tx.cliente.upsert({
+        where: { cedula: consumidorCedula },
+        update: {},
+        create: {
+          nombres: "CONSUMIDOR",
+          apellidos: "FINAL",
+          cedula: consumidorCedula,
+          correo: null,
+          telefono: null,
+          direccion: null,
+          id_estado: 1,
+          id_usuario_modifi: data.id_usuario_modifi ?? null,
+        },
+        select: { id_cliente: true },
+      });
+      idCliente = consumidor.id_cliente;
+    }
+
     // 2.1) Verificar stock antes de crear
     for (const item of itemsCalculados) {
       const producto = await tx.producto.findUnique({
@@ -192,7 +221,7 @@ export async function crearVenta(data: {
     const nuevaFactura = await tx.factura.create({
       data: {
         numero_factura,
-        id_cliente: data.id_cliente,
+        id_cliente: idCliente,
         id_usuario: data.id_usuario,
         observacion: data.observacion ?? null,
         forma_pago: data.forma_pago,
@@ -260,13 +289,30 @@ export async function crearVenta(data: {
 
       const fechaInicio = new Date();
       const fechaPrimera = new Date(fecha_primer_vencimiento);
-      const intervaloDias = dias_entre_cuotas ?? 30;
+      if (Number.isNaN(fechaPrimera.getTime())) {
+        throw new Error("FECHA_PRIMER_VENCIMIENTO_INVALIDA");
+      }
+
+      const intervaloDias = dias_entre_cuotas ?? null;
+
+      function addMonthsPreserveDayUtc(base: Date, monthsToAdd: number) {
+        const year = base.getUTCFullYear();
+        const month = base.getUTCMonth();
+        const day = base.getUTCDate();
+
+        const targetMonthIndex = month + monthsToAdd;
+        const lastOfTarget = new Date(Date.UTC(year, targetMonthIndex + 1, 0));
+        const safeDay = Math.min(day, lastOfTarget.getUTCDate());
+
+        return new Date(Date.UTC(year, targetMonthIndex, safeDay));
+      }
 
       const credito = await tx.credito.create({
         data: {
           id_factura: nuevaFactura.id_factura,
           monto_total: total,
           saldo_pendiente: total,
+          estado_credito: "ACTIVO",
           fecha_inicio: fechaInicio,
           fecha_fin: null,
           id_estado: 1,
@@ -274,21 +320,40 @@ export async function crearVenta(data: {
         },
       });
 
-      // Generar cuotas simples iguales
-      const montoPorCuota = Number((total / numero_cuotas).toFixed(2));
-      const cuotasData = [];
+      // Generar cuotas: mensual por defecto (o días si se envía dias_entre_cuotas)
+      // Ajuste de redondeo: la última cuota absorbe el residuo para que sumen exactamente el total.
+      const montoBase = Number((total / numero_cuotas).toFixed(2));
+      const cuotasData: Array<{
+        id_credito: number;
+        numero_cuota: number;
+        fecha_vencimiento: Date;
+        monto_cuota: number;
+        monto_pagado: number;
+        estado_cuota: string;
+        id_usuario_modifi: number | null;
+      }> = [];
 
+      let acumulado = 0;
       for (let i = 0; i < numero_cuotas; i++) {
-        const fechaVenc = new Date(fechaPrimera);
-        fechaVenc.setDate(
-          fechaVenc.getDate() + i * intervaloDias
-        );
+        const fechaVenc = intervaloDias
+          ? (() => {
+              const d = new Date(fechaPrimera);
+              d.setUTCDate(d.getUTCDate() + i * intervaloDias);
+              return d;
+            })()
+          : addMonthsPreserveDayUtc(fechaPrimera, i);
+
+        const montoCuota =
+          i === numero_cuotas - 1
+            ? Number((total - acumulado).toFixed(2))
+            : montoBase;
+        acumulado = Number((acumulado + montoCuota).toFixed(2));
 
         cuotasData.push({
           id_credito: credito.id_credito,
           numero_cuota: i + 1,
           fecha_vencimiento: fechaVenc,
-          monto_cuota: montoPorCuota,
+          monto_cuota: montoCuota,
           monto_pagado: 0,
           estado_cuota: "PENDIENTE",
           id_usuario_modifi: data.id_usuario_modifi ?? null,

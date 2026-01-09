@@ -8,6 +8,10 @@ export type ProductoRecord = {
 	id_proveedor: number | null
 	precio_compra: number
 	precio_venta: number
+	// Campos unificados del backend para evitar cálculos/joins por el cliente.
+	costo?: number | null
+	margen?: number | null
+	proveedor_nombre?: string | null
 	cantidad_stock: number
 	stock_minimo: number
 	proveedor?: {
@@ -24,6 +28,10 @@ export type ProveedorRecord = {
 export type VentaListRecord = {
 	id_factura: number
 	numero_factura: string
+	// Campos enriquecidos desde el backend (pueden ser null si no aplica)
+	costo?: number | null
+	margen?: number | null
+	proveedor_nombre?: string | null
 	fecha_factura: string
 }
 

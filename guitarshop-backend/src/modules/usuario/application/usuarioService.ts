@@ -1,6 +1,7 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import { Prisma } from "../../../../generated/prisma/client";
 import { hashPassword } from "../../auth/application/authService";
+import { ensureEstadoRegistroActivo } from "../../../shared/prisma/estadoRegistro";
 
 // Campos que vamos a devolver al frontend (sin password_hash)
 const usuarioSelect = {
@@ -54,6 +55,7 @@ export async function crearUsuario(data: {
   id_usuario_modifi?: number | null;
 }) {
   const password_hash = await hashPassword(data.password);
+  const estadoActivo = await ensureEstadoRegistroActivo();
 
   try {
     const usuario = await prisma.usuario.create({
@@ -66,7 +68,7 @@ export async function crearUsuario(data: {
         rol: data.rol ?? "VENDEDOR",
         password_hash,
         // fecha_creacion se pone sola por default
-        // id_estado default = 1 (activo)
+        id_estado: estadoActivo.id_estado,
         id_usuario_modifi: data.id_usuario_modifi ?? null,
       },
       select: usuarioSelect,

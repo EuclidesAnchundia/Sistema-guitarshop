@@ -19,6 +19,19 @@ export const productClient = {
 			...item,
 			precio_compra: Number((item as any).precio_compra ?? 0),
 			precio_venta: Number((item as any).precio_venta ?? 0),
+			costo: (() => {
+				const raw = (item as any).costo
+				if (raw === null || raw === undefined) return null
+				const parsed = Number(raw)
+				return Number.isFinite(parsed) ? parsed : null
+			})(),
+			margen: (() => {
+				const raw = (item as any).margen
+				if (raw === null || raw === undefined) return null
+				const parsed = Number(raw)
+				return Number.isFinite(parsed) ? parsed : null
+			})(),
+			proveedor_nombre: (item as any).proveedor_nombre ?? null,
 			cantidad_stock: Number((item as any).cantidad_stock ?? 0),
 			stock_minimo: Number((item as any).stock_minimo ?? 0),
 		}))

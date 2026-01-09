@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useFieldArray, useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -18,7 +18,7 @@ import { SaleSummaryPanel } from "./SaleSummaryPanel"
 import { SaleTopBar } from "./SaleTopBar"
 import { SaleSearchAutocomplete } from "./SaleSearchAutocomplete"
 import { SaleCartTable } from "./SaleCartTable"
-import { SaleInvoiceDialog } from "./SaleInvoiceDialog"
+import { SaleInvoiceAutoPrint } from "./SaleInvoiceAutoPrint"
 
 const IVA_RATE = 0.15
 
@@ -51,10 +51,16 @@ const detalleSchema = z
   })
 
 const ventaSchema = z.object({
-  id_cliente: z.number().int("Cliente inválido").positive("Selecciona un cliente"),
+  // 0 => consumidor final
+  id_cliente: z.number().int("Cliente inválido").nonnegative("Cliente inválido"),
   observacion: z.string().trim().max(255, "Máximo 255 caracteres").optional().or(z.literal("")),
   forma_pago: z.enum(["CONTADO", "CREDITO"]),
   detalle: z.array(detalleSchema).min(1, "Agrega al menos un ítem"),
+}).superRefine((data, ctx) => {
+  // Regla de negocio: crédito requiere cliente
+  if (data.forma_pago === "CREDITO" && (!data.id_cliente || data.id_cliente === 0)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["id_cliente"], message: "Selecciona un cliente para crédito" })
+  }
 })
 
 type Props = {
@@ -76,10 +82,12 @@ const defaultValues: SaleCreateFormValues = {
 
 export function SaleCreateModal({ open, onOpenChange, clientes, productos, clientesLoading }: Props) {
   const queryClient = useQueryClient()
+  const autoPrintTimeoutRef = useRef<number | null>(null)
 
   const [formError, setFormError] = useState<string | null>(null)
-  const [createdSaleId, setCreatedSaleId] = useState<number | null>(null)
-  const [invoiceOpen, setInvoiceOpen] = useState(false)
+  const [createdSale, setCreatedSale] = useState<import("../../../services/salesService").VentaDetailRecord | null>(null)
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState(false)
+  const [successOpen, setSuccessOpen] = useState(false)
   const [descuentoGeneral, setDescuentoGeneral] = useState<number>(0)
   const [showConfirmClose, setShowConfirmClose] = useState(false)
 
@@ -119,7 +127,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
 
   const buildPayload = (values: SaleCreateFormValues): VentaPayload => {
     return {
-      id_cliente: values.id_cliente,
+      id_cliente: values.id_cliente && values.id_cliente !== 0 ? values.id_cliente : null,
       forma_pago: values.forma_pago,
       observacion: values.observacion?.trim() ? values.observacion.trim() : null,
       detalle: values.detalle.map((item) => ({
@@ -131,15 +139,33 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
     }
   }
 
+  useEffect(() => {
+    return () => {
+      if (autoPrintTimeoutRef.current) {
+        window.clearTimeout(autoPrintTimeoutRef.current)
+        autoPrintTimeoutRef.current = null
+      }
+    }
+  }, [])
+
   const createMutation = useMutation({
     mutationFn: (payload: VentaPayload) => salesService.createSale(payload),
     onSuccess: (sale) => {
       queryClient.invalidateQueries({ queryKey: ["ventas"] })
-      toast.success("Venta registrada")
+      toast.success("Venta exitosa")
 
-      // Abrir factura post-venta
-      setCreatedSaleId(sale.id_factura)
-      setInvoiceOpen(true)
+      // Imprimir automáticamente al crear la venta (sin modal/preview interno)
+      setCreatedSale(sale)
+      setSuccessOpen(true)
+      setAutoPrintEnabled(false)
+
+      // Dar ~1s para que el usuario vea el mensaje antes de abrir impresión
+      if (autoPrintTimeoutRef.current) {
+        window.clearTimeout(autoPrintTimeoutRef.current)
+      }
+      autoPrintTimeoutRef.current = window.setTimeout(() => {
+        setAutoPrintEnabled(true)
+      }, 1000)
 
       form.reset(defaultValues)
       setFormError(null)
@@ -175,17 +201,6 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
 
   const onSubmit = form.handleSubmit((values) => {
     setFormError(null)
-
-    // Validación de cliente
-    if (!values.id_cliente || values.id_cliente === 0) {
-      setFormError("Selecciona un cliente")
-      form.setError("id_cliente", {
-        type: "required",
-        message: "Selecciona un cliente",
-      })
-      toast.error("Selecciona un cliente")
-      return
-    }
 
     // Validación de stock en frontend para evitar error backend.
     let stockOk = true
@@ -267,7 +282,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
           onOpenChange(true)
         }}
       >
-        <DialogContent className="w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl" disableOutsideClose hideCloseButton>
+        <DialogContent className="dialog-content w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl" disableOutsideClose hideCloseButton>
           <div className="flex h-[95vh] flex-col">
             <DialogHeader className="border-b px-8 py-6 text-left flex-shrink-0">
               <DialogTitle className="text-2xl font-semibold text-slate-900">Registrar venta</DialogTitle>
@@ -334,7 +349,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
 
       {/* Diálogo de confirmación para cerrar */}
       <Dialog open={showConfirmClose} onOpenChange={setShowConfirmClose}>
-        <DialogContent className="w-full max-w-lg sm:rounded-2xl p-0" disableOutsideClose>
+        <DialogContent className="dialog-content w-full max-w-lg sm:rounded-2xl p-0" disableOutsideClose>
           <DialogHeader className="px-8 py-6">
             <DialogTitle className="text-xl font-semibold text-slate-900">¿Descartar cambios?</DialogTitle>
             <DialogDescription className="text-sm text-slate-600 mt-3">
@@ -364,11 +379,42 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
         </DialogContent>
       </Dialog>
 
-      {/* Factura post-venta */}
-      <SaleInvoiceDialog saleId={createdSaleId} open={invoiceOpen} onClose={() => {
-        setInvoiceOpen(false)
-        setCreatedSaleId(null)
-      }} />
+      {/* Aviso post-venta */}
+      <Dialog
+        open={successOpen}
+        onOpenChange={(next) => {
+          // Se cierra automáticamente al terminar impresión.
+          if (!next) return
+          setSuccessOpen(true)
+        }}
+      >
+        <DialogContent className="dialog-content w-full max-w-md p-0 sm:rounded-2xl" disableOutsideClose hideCloseButton>
+          <div className="px-8 py-7">
+            <DialogHeader className="text-center">
+              <DialogTitle className="text-xl font-semibold text-slate-900">Venta exitosa</DialogTitle>
+              <DialogDescription className="mt-2 text-sm text-slate-600">
+                Preparando impresión…
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center">
+              <p className="text-sm font-medium text-slate-700">Se abrirá el diálogo de impresión en un momento.</p>
+              <p className="mt-1 text-xs text-slate-500">Si tu navegador bloquea ventanas, permite la impresión.</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Impresión automática post-venta (sin UI) */}
+      <SaleInvoiceAutoPrint
+        enabled={autoPrintEnabled}
+        sale={createdSale}
+        onDone={() => {
+          setAutoPrintEnabled(false)
+          setCreatedSale(null)
+          setSuccessOpen(false)
+        }}
+      />
     </>
   )
 }

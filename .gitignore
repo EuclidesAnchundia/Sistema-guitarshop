@@ -5,6 +5,9 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+
+*.log
 
 # ========================
 # BUILD / FRAMEWORKS
@@ -13,6 +16,11 @@ dist/
 .next/
 out/
 .vite/
+
+# Coverage / caches
+coverage/
+.eslintcache
+*.tsbuildinfo
 
 # ========================
 # VARIABLES DE ENTORNO
@@ -35,3 +43,14 @@ generated/
 # ========================
 .vscode/
 .DS_Store
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# JetBrains
+.idea/
+
+# Vercel / Netlify (si deployas)
+.vercel/
+.netlify/

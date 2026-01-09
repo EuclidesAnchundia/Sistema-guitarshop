@@ -43,10 +43,10 @@ export const useProductSalesSummaryQuery = (productId: number, enabled: boolean)
 	})
 }
 
-export const useKardexQuery = (enabled = true) => {
+export const useKardexQuery = (productId: number | null, enabled = true) => {
 	return useQuery<KardexMovimientoRecord[]>({
-		queryKey: ["kardex"],
-		enabled,
+		queryKey: ["kardex", productId],
+		enabled: enabled && Boolean(productId),
 		staleTime: 30_000,
 		queryFn: () => productClient.listKardex(),
 	})

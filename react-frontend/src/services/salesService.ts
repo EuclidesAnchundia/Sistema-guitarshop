@@ -56,7 +56,7 @@ export type VentaDetailRecord = VentaListRecord & {
 }
 
 export type VentaPayload = {
-	id_cliente: number
+	id_cliente: number | null
 	forma_pago: FormaPago
 	observacion: string | null
 	detalle: Array<{

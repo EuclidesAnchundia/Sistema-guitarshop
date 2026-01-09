@@ -1,4 +1,5 @@
 import prisma from "../../../shared/prisma/prismaClient";
+import { Prisma } from "../../../../generated/prisma/client";
 
 type DateRange = { start: Date; end: Date };
 
@@ -101,22 +102,33 @@ export async function obtenerDashboard() {
     take: 5,
   });
 
-  const salesHistoryPromise = prisma.factura.findMany({
-    where: { fecha_factura: { gte: historyStart } },
-    select: { fecha_factura: true, total: true },
-    orderBy: { fecha_factura: "asc" },
-  });
+  type SalesHistoryRow = {
+    day: Date;
+    total: Prisma.Decimal | number | string;
+  };
 
-  const detallesDelMesPromise = prisma.detalle_factura.findMany({
-    where: { factura: { fecha_factura: { gte: startOfMonth } } },
-    select: {
-      cantidad: true,
-      subtotal: true,
-      producto: {
-        select: { precio_compra: true },
-      },
-    },
-  });
+  const salesHistoryPromise = prisma.$queryRaw<SalesHistoryRow[]>(Prisma.sql`
+    SELECT
+      DATE(f.fecha_factura) AS day,
+      COALESCE(SUM(f.total), 0) AS total
+    FROM factura f
+    WHERE f.fecha_factura >= ${historyStart} AND f.fecha_factura < ${startOfTomorrow}
+    GROUP BY DATE(f.fecha_factura)
+    ORDER BY day ASC
+  `);
+
+  type MonthCostRow = {
+    total_costos: Prisma.Decimal | number | string;
+  };
+
+  const costoMesPromise = prisma.$queryRaw<MonthCostRow[]>(Prisma.sql`
+    SELECT
+      COALESCE(SUM(df.cantidad * COALESCE(p.precio_compra, 0)), 0) AS total_costos
+    FROM detalle_factura df
+    INNER JOIN factura f ON f.id_factura = df.id_factura
+    INNER JOIN producto p ON p.id_producto = df.id_producto
+    WHERE f.fecha_factura >= ${startOfMonth} AND f.fecha_factura < ${startOfNextMonth}
+  `);
 
   const cuotasVencidasFilter = {
     estado_cuota: { not: "PAGADO" },
@@ -186,7 +198,7 @@ export async function obtenerDashboard() {
     lowStockProducts,
     topProductsRaw,
     salesHistoryRaw,
-    detallesDelMes,
+    costoMesRows,
     cuotasVencidasAggregate,
     cuotasVencidasCount,
     cuotasVencidasDetalle,
@@ -199,7 +211,7 @@ export async function obtenerDashboard() {
     lowStockPromise,
     topProductsPromise,
     salesHistoryPromise,
-    detallesDelMesPromise,
+    costoMesPromise,
     cuotasVencidasAggregatePromise,
     cuotasVencidasCountPromise,
     cuotasVencidasDetallePromise,
@@ -234,10 +246,9 @@ export async function obtenerDashboard() {
   });
 
   const historyEntries = new Map<string, number>();
-  for (const factura of salesHistoryRaw) {
-    const key = factura.fecha_factura.toISOString().slice(0, 10);
-    const prev = historyEntries.get(key) ?? 0;
-    historyEntries.set(key, prev + toNumber(factura.total));
+  for (const row of salesHistoryRaw) {
+    const key = row.day.toISOString().slice(0, 10);
+    historyEntries.set(key, toNumber(row.total));
   }
 
   const salesHistory = Array.from({ length: historyDays }, (_, idx) => {
@@ -250,10 +261,7 @@ export async function obtenerDashboard() {
   });
 
   const totalIngresosMes = salesMonth.amount;
-  const totalCostosMes = detallesDelMes.reduce((acc, detalle) => {
-    const costo = detalle.producto?.precio_compra ? toNumber(detalle.producto.precio_compra) : 0;
-    return acc + detalle.cantidad * costo;
-  }, 0);
+  const totalCostosMes = toNumber(costoMesRows?.[0]?.total_costos);
   const totalUtilidadMes = totalIngresosMes - totalCostosMes;
   const margen = totalIngresosMes === 0 ? 0 : totalUtilidadMes / totalIngresosMes;
 

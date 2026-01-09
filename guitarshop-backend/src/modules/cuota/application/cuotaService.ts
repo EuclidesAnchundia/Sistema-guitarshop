@@ -1,4 +1,5 @@
 import prisma from "../../../shared/prisma/prismaClient";
+import { recalcCreditStatus } from "../../credito/application/recalcCreditStatus";
 
 // ==========================
 // OBTENER TODAS LAS CUOTAS
@@ -137,6 +138,8 @@ export async function pagarCuota(params: {
       },
     });
 
+    await recalcCreditStatus(credito.id_credito, tx);
+
     return {
       cuota: cuotaActualizada,
       credito: {
@@ -144,6 +147,96 @@ export async function pagarCuota(params: {
         saldo_pendiente: creditoActualizado.saldo_pendiente,
         fecha_fin: creditoActualizado.fecha_fin,
       },
+    };
+  });
+
+  return resultado;
+}
+
+// ==========================
+// PAGO COMPLETO DE CUOTA (marcar como PAGADA)
+// ==========================
+export async function pagarCuotaCompleta(params: {
+  id_cuota: number;
+  id_usuario_modifi: number;
+}) {
+  const { id_cuota, id_usuario_modifi } = params;
+
+  const cuota = await prisma.cuota.findUnique({
+    where: { id_cuota },
+    include: { credito: true },
+  });
+
+  if (!cuota) {
+    throw new Error("CUOTA_NO_ENCONTRADA");
+  }
+
+  const montoCuota = Number(cuota.monto_cuota);
+  const montoPagado = Number(cuota.monto_pagado);
+  const restante = Number((montoCuota - montoPagado).toFixed(2));
+
+  const yaPagada = cuota.estado_cuota === "PAGADA" || cuota.fecha_pago !== null || restante <= 0;
+  if (yaPagada) {
+    throw new Error("CUOTA_YA_PAGADA");
+  }
+
+  const resultado = await prisma.$transaction(async (tx) => {
+    const cuotaActualizada = await tx.cuota.update({
+      where: { id_cuota },
+      data: {
+        monto_pagado: cuota.monto_cuota,
+        estado_cuota: "PAGADA",
+        fecha_pago: new Date(),
+        id_usuario_modifi,
+      },
+      select: cuotaSelect,
+    });
+
+    const credito = await tx.credito.findUnique({
+      where: { id_credito: cuota.id_credito },
+    });
+
+    if (!credito) {
+      throw new Error("CREDITO_NO_ENCONTRADO");
+    }
+
+    const saldoActual = Number(credito.saldo_pendiente);
+    const nuevoSaldo = Number((saldoActual - restante).toFixed(2));
+
+    const creditoActualizado = await tx.credito.update({
+      where: { id_credito: credito.id_credito },
+      data: {
+        saldo_pendiente: nuevoSaldo <= 0 ? 0 : nuevoSaldo,
+        fecha_fin: nuevoSaldo <= 0 ? new Date() : credito.fecha_fin,
+        id_usuario_modifi,
+      },
+      select: {
+        id_credito: true,
+        saldo_pendiente: true,
+        fecha_fin: true,
+        estado_credito: true,
+      },
+    });
+
+    await recalcCreditStatus(credito.id_credito, tx);
+
+    const creditoRefrescado = await tx.credito.findUnique({
+      where: { id_credito: credito.id_credito },
+      select: {
+        id_credito: true,
+        saldo_pendiente: true,
+        fecha_fin: true,
+        estado_credito: true,
+      },
+    });
+
+    if (!creditoRefrescado) {
+      throw new Error("CREDITO_NO_ENCONTRADO");
+    }
+
+    return {
+      cuota: cuotaActualizada,
+      credito: creditoRefrescado,
     };
   });
 

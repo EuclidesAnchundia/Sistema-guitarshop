@@ -59,10 +59,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    const formaPago = body.forma_pago ?? body.paymentType ?? "CONTADO";
+
     const venta = await crearVenta({
       id_cliente: body.id_cliente,
       id_usuario: auth.userId,
-      forma_pago: body.forma_pago ?? "CONTADO",
+      forma_pago: formaPago,
       observacion: body.observacion ?? null,
       detalle: body.detalle ?? [],
       creditoConfig: body.creditoConfig,
@@ -102,6 +104,13 @@ export async function POST(req: Request) {
       if (error.message === "NUMERO_CUOTAS_INVALIDO") {
         return jsonCors(
           { error: "El número de cuotas del crédito es inválido" },
+          { status: 400 }
+        );
+      }
+
+      if (error.message === "FECHA_PRIMER_VENCIMIENTO_INVALIDA") {
+        return jsonCors(
+          { error: "La fecha del primer vencimiento del crédito es inválida" },
           { status: 400 }
         );
       }

@@ -18,7 +18,10 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@shared/*": ["../shared/*"]
-    }
+      "@shared/*": ["src/shared/*"]
+    },
+    "skipLibCheck": true
   }
+  ,
+  "exclude": ["node_modules", "dist", "build"]
 }

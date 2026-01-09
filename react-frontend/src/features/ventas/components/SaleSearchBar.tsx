@@ -11,12 +11,6 @@ type Props = {
   disabled?: boolean
 }
 
-function matchesProduct(p: ProductoOption, q: string) {
-  const value = q.trim().toLowerCase()
-  if (!value) return false
-  return p.codigo_producto.toLowerCase().includes(value) || p.nombre_producto.toLowerCase().includes(value)
-}
-
 export function SaleSearchBar({ productos, onAddProduct, disabled }: Props) {
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
@@ -24,11 +18,26 @@ export function SaleSearchBar({ productos, onAddProduct, disabled }: Props) {
 
   const debounced = useDebouncedValue(query)
 
+  const productosIndex = useMemo(() => {
+    return productos.map((p) => ({
+      producto: p,
+      search: `${p.codigo_producto} ${p.nombre_producto}`.toLowerCase(),
+    }))
+  }, [productos])
+
   const suggestions = useMemo(() => {
-    const trimmed = debounced.trim()
+    const trimmed = debounced.trim().toLowerCase()
     if (trimmed.length < 2) return []
-    return productos.filter((p) => matchesProduct(p, trimmed)).slice(0, 8)
-  }, [debounced, productos])
+
+    const results: ProductoOption[] = []
+    for (const entry of productosIndex) {
+      if (entry.search.includes(trimmed)) {
+        results.push(entry.producto)
+        if (results.length >= 8) break
+      }
+    }
+    return results
+  }, [debounced, productosIndex])
 
   useEffect(() => {
     if (!open) return

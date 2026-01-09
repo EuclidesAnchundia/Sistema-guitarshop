@@ -7,12 +7,8 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } f
 import type { KardexMovimientoRecord, ProductoRecord, ProductSalesSummary } from "../product.types"
 import {
 	computeMargin,
-	marginStatusLabel,
 	productStockStatusLabel,
-	resolveMarginStatus,
 	resolveProductStockStatus,
-	resolveSalesStatus,
-	salesStatusLabel,
 } from "../product.utils"
 
 type SalesState = {
@@ -59,8 +55,6 @@ export function ProductsDetailDrawer(props: Props) {
 	}, [detailProduct?.id_producto])
 
 	const stockStatus = detailProduct ? resolveProductStockStatus(detailProduct) : null
-	const salesStatus = resolveSalesStatus(props.sales.data)
-	const marginStatus = detailProduct ? resolveMarginStatus(detailProduct) : null
 
 	const salesError = props.sales.isError ? props.sales.error : null
 	const salesErrorStatus = isAxiosError(salesError) ? salesError.response?.status : undefined
@@ -75,18 +69,6 @@ export function ProductsDetailDrawer(props: Props) {
 				: stockStatus === "LOW"
 					? "bg-amber-50 text-amber-700"
 					: "bg-emerald-50 text-emerald-700"
-	const salesStatusClass =
-		salesStatus === null
-			? "bg-slate-100 text-slate-700"
-			: salesStatus === "NO_SALES_30D"
-				? "bg-amber-50 text-amber-700"
-				: "bg-emerald-50 text-emerald-700"
-	const marginStatusClass =
-		marginStatus === "NO_COST"
-			? "bg-slate-100 text-slate-700"
-			: marginStatus === "LOW_MARGIN"
-				? "bg-amber-50 text-amber-700"
-				: "bg-emerald-50 text-emerald-700"
 
 	const buildMovementType = (m: KardexMovimientoRecord): "VENTA" | "AJUSTE" => {
 		const raw = `${m.tipo_movimiento ?? ""} ${m.origen ?? ""}`.toUpperCase()
@@ -104,7 +86,12 @@ export function ProductsDetailDrawer(props: Props) {
 
 	const filteredMovements = useMemo(() => {
 		if (!detailProduct) return []
-		return (props.movements.data ?? []).filter((m) => m.id_producto === detailProduct.id_producto)
+		const filtered = (props.movements.data ?? []).filter((m) => Number(m.id_producto) === Number(detailProduct.id_producto))
+		return filtered.sort((a, b) => {
+			const dateA = new Date(a.fecha_movimiento ?? 0).getTime()
+			const dateB = new Date(b.fecha_movimiento ?? 0).getTime()
+			return dateB - dateA
+		})
 	}, [detailProduct, props.movements.data])
 
 	const visibleMovements = useMemo(() => {
@@ -132,12 +119,6 @@ export function ProductsDetailDrawer(props: Props) {
 									<div className="mt-2 flex flex-wrap items-center gap-2">
 										<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>
 											Stock: {stockStatus ? productStockStatusLabel(stockStatus) : "—"}
-										</span>
-										<span className={`rounded-full px-3 py-1 text-xs font-semibold ${salesStatusClass}`}>
-											Ventas: {salesStatus ? salesStatusLabel(salesStatus) : "—"}
-										</span>
-										<span className={`rounded-full px-3 py-1 text-xs font-semibold ${marginStatusClass}`}>
-											Margen: {marginStatus ? marginStatusLabel(marginStatus) : "—"}
 										</span>
 									</div>
 								</div>

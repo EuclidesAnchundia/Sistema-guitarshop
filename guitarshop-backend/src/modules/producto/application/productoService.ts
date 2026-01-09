@@ -1,6 +1,35 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import { Prisma } from "../../../../generated/prisma/client";
 
+const toNumberOrNull = (
+  value: Prisma.Decimal | number | string | null | undefined
+): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const decimal = value as unknown as { toNumber?: () => number };
+  if (typeof decimal.toNumber === "function") {
+    const parsed = decimal.toNumber();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const fallback = Number(value as unknown as any);
+  return Number.isFinite(fallback) ? fallback : null;
+};
+
+const computeMarginOrNull = (
+  costo: Prisma.Decimal | number | string | null | undefined,
+  precioVenta: Prisma.Decimal | number | string | null | undefined
+): number | null => {
+  const compra = toNumberOrNull(costo);
+  const venta = toNumberOrNull(precioVenta);
+  if (!(compra !== null && compra > 0)) return null;
+  if (!(venta !== null && venta > 0)) return null;
+  return venta - compra;
+};
+
 const productoSelect = {
   id_producto: true,
   codigo_producto: true,
@@ -33,7 +62,15 @@ export async function listarProductos() {
     orderBy: { id_producto: "asc" },
   });
 
-  return productos;
+  return productos.map((producto) => {
+    const costo = toNumberOrNull(producto.precio_compra);
+    return {
+      ...producto,
+      costo: costo !== null && costo > 0 ? costo : null,
+      margen: computeMarginOrNull(producto.precio_compra, producto.precio_venta),
+      proveedor_nombre: producto.proveedor?.nombre_proveedor ?? null,
+    };
+  });
 }
 
 export type StockStatusFilter = "all" | "normal" | "low" | "critical" | "risk";
@@ -72,9 +109,12 @@ export type ListarProductosPaginadoResult = {
     id_proveedor: number | null;
     precio_compra: Prisma.Decimal | number | string;
     precio_venta: Prisma.Decimal | number | string;
+    costo: number | null;
+    margen: number | null;
     cantidad_stock: number;
     stock_minimo: number;
     proveedor: { id_proveedor: number; nombre_proveedor: string } | null;
+    proveedor_nombre: string | null;
   }>;
   total: number;
   page: number;
@@ -240,6 +280,11 @@ export async function listarProductosPaginado(
     id_proveedor: r.id_proveedor === null ? null : Number(r.id_proveedor),
     precio_compra: r.precio_compra ?? 0,
     precio_venta: r.precio_venta ?? 0,
+    costo: (() => {
+      const compra = toNumberOrNull(r.precio_compra);
+      return compra !== null && compra > 0 ? compra : null;
+    })(),
+    margen: computeMarginOrNull(r.precio_compra, r.precio_venta),
     cantidad_stock: Number(r.cantidad_stock ?? 0),
     stock_minimo: Number(r.stock_minimo ?? 0),
     proveedor:
@@ -249,6 +294,7 @@ export async function listarProductosPaginado(
             nombre_proveedor: String(r.proveedor_nombre),
           }
         : null,
+    proveedor_nombre: r.proveedor_nombre ?? null,
   }));
 
   const critical = Number(k.critical ?? 0);

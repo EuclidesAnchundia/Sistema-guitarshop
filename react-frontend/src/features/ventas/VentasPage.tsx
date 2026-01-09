@@ -159,7 +159,7 @@ export default function VentasPage() {
 
   // Inventario resumido para autocompletar cada detalle.
   const productosQuery = useQuery<ProductoOption[]>({
-    queryKey: ["productos"],
+    queryKey: ["productos-catalogo"],
     enabled: isAdmin,
     queryFn: async () => {
       const data = await httpRequest<unknown>("/producto")
@@ -732,7 +732,7 @@ export default function VentasPage() {
         }}
       >
         <DialogContent
-          className="flex h-[85vh] w-[80vw] max-w-5xl flex-col overflow-hidden p-0 max-sm:max-h-[90vh]"
+          className="dialog-content flex h-[85vh] w-[80vw] max-w-5xl flex-col overflow-hidden p-0 max-sm:max-h-[90vh]"
           disableOutsideClose
           hideCloseButton
         >

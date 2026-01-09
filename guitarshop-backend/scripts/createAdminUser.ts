@@ -11,14 +11,17 @@ async function ensureAdminUser() {
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, salt);
 
-  const estadoActivo = await prisma.estado_registro.findFirst({
+  const estadoActivo = await prisma.estado_registro.upsert({
     where: { nombre_estado: "ACTIVO" },
+    update: {
+      descripcion: "Registro activo",
+    },
+    create: {
+      nombre_estado: "ACTIVO",
+      descripcion: "Registro activo",
+    },
     select: { id_estado: true },
   });
-
-  if (!estadoActivo) {
-    throw new Error("No existe el estado ACTIVO en la base de datos");
-  }
 
   const admin = await prisma.usuario.upsert({
     where: { correo: ADMIN_EMAIL },

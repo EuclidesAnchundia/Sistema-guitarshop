@@ -70,6 +70,7 @@ export const POST = withErrorHandling(async (req: Request) => {
 		.object({
 			id_cliente: z.number().int().positive(),
 			forma_pago: z.enum(["CONTADO", "CREDITO"]).optional(),
+			paymentType: z.enum(["CONTADO", "CREDITO"]).optional(),
 			observacion: z.string().trim().nullable().optional(),
 			detalle: z.array(detalleSchema).min(1),
 			creditoConfig: creditoConfigSchema.optional(),
@@ -77,11 +78,12 @@ export const POST = withErrorHandling(async (req: Request) => {
 		.passthrough();
 
 	const dto = parseOrThrow(schema, body);
+	const formaPago = dto.forma_pago ?? dto.paymentType ?? "CONTADO";
 
 	const factura = await crearVenta({
 		id_cliente: dto.id_cliente,
 		id_usuario: auth.userId,
-		forma_pago: dto.forma_pago ?? "CONTADO",
+		forma_pago: formaPago,
 		observacion: dto.observacion ?? null,
 		detalle: dto.detalle,
 		creditoConfig: dto.creditoConfig,

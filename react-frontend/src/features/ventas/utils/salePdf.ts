@@ -1,73 +1,54 @@
 import jsPDF from "jspdf"
-import autoTable from "jspdf-autotable"
-import type { jsPDF as JsPdfType } from "jspdf"
-
+import html2canvas from "html2canvas"
 import type { VentaDetailRecord } from "../../../services/salesService"
-import { formatMoney } from "../../../utils/number"
 
-const dateFormatter = new Intl.DateTimeFormat("es-EC", {
-  dateStyle: "medium",
-  timeStyle: "short",
-})
+export async function downloadSalePdf(venta: VentaDetailRecord) {
+  const printRoot = document.getElementById("print-root")
+  
+  if (!printRoot) {
+    console.error("No se encontró el elemento print-root")
+    return
+  }
 
-export function downloadSalePdf(venta: VentaDetailRecord) {
-  const doc = new jsPDF({ unit: "pt", format: "a4" })
+  try {
+    // Hacer visible temporalmente para captura
+    printRoot.style.display = "block"
+    printRoot.style.position = "absolute"
+    printRoot.style.left = "-9999px"
+    
+    const canvas = await html2canvas(printRoot, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+      width: 794, // A4 width in pixels at 96 DPI (210mm)
+      height: 1123, // A4 height in pixels at 96 DPI (297mm)
+    })
 
-  const marginX = 40
-  let y = 50
+    // Ocultar de nuevo
+    printRoot.style.display = ""
+    printRoot.style.position = ""
+    printRoot.style.left = ""
 
-  doc.setFontSize(16)
-  doc.text("Factura", marginX, y)
+    const imgData = canvas.toDataURL("image/png")
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    })
 
-  doc.setFontSize(10)
-  y += 18
-  doc.text(`N°: ${venta.numero_factura || "—"}`, marginX, y)
+    const imgWidth = 210 // A4 width in mm
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
 
-  y += 14
-  doc.text(`Fecha: ${venta.fecha_factura ? dateFormatter.format(new Date(venta.fecha_factura)) : "—"}`, marginX, y)
+    pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight)
 
-  y += 14
-  const clienteNombre = venta.cliente ? `${venta.cliente.nombres} ${venta.cliente.apellidos}` : "—"
-  doc.text(`Cliente: ${clienteNombre}`, marginX, y)
-
-  y += 14
-  doc.text(`Cédula: ${venta.cliente?.cedula ?? "—"}`, marginX, y)
-
-  y += 22
-
-  const head = [["Código", "Producto", "Cant.", "Precio", "Desc.", "Subtotal"]]
-  const body = (venta.detalle_factura ?? []).map((line) => [
-    line.producto?.codigo_producto ?? "",
-    line.producto?.nombre_producto ?? "",
-    String(line.cantidad ?? 0),
-    formatMoney(line.precio_unitario ?? 0),
-    formatMoney(line.descuento ?? 0),
-    formatMoney(line.subtotal ?? 0),
-  ])
-
-  autoTable(doc, {
-    startY: y,
-    head,
-    body,
-    styles: { fontSize: 9, cellPadding: 4 },
-    headStyles: { fillColor: [15, 23, 42] },
-    columnStyles: {
-      2: { halign: "right" },
-      3: { halign: "right" },
-      4: { halign: "right" },
-      5: { halign: "right" },
-    },
-  })
-
-  type DocWithAutoTable = JsPdfType & { lastAutoTable?: { finalY?: number } }
-  const finalY = (doc as DocWithAutoTable).lastAutoTable?.finalY ?? y + 200
-
-  doc.setFontSize(10)
-  doc.text(`Subtotal: ${formatMoney(venta.subtotal ?? 0)}`, marginX, finalY + 24)
-  doc.text(`IVA: ${formatMoney(venta.impuesto ?? 0)}`, marginX, finalY + 40)
-  doc.setFontSize(12)
-  doc.text(`Total: ${formatMoney(venta.total ?? 0)}`, marginX, finalY + 60)
-
-  const safeNumero = (venta.numero_factura || "venta").replace(/[^a-zA-Z0-9-_]/g, "_")
-  doc.save(`Factura_${safeNumero}.pdf`)
+    const safeNumero = (venta.numero_factura || "venta").replace(/[^a-zA-Z0-9-_]/g, "_")
+    pdf.save(`Factura_${safeNumero}.pdf`)
+  } catch (error) {
+    console.error("Error generando PDF:", error)
+    // Asegurar que se oculte el elemento
+    printRoot.style.display = ""
+    printRoot.style.position = ""
+    printRoot.style.left = ""
+  }
 }

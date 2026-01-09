@@ -62,6 +62,12 @@ function mapLegacyErrorCode(
 				code: message,
 				message: "El número de cuotas del crédito es inválido",
 			};
+		case "FECHA_PRIMER_VENCIMIENTO_INVALIDA":
+			return {
+				status: 400,
+				code: message,
+				message: "La fecha del primer vencimiento del crédito es inválida",
+			};
 		case "PRODUCTO_CON_RELACIONES":
 			return {
 				status: 409,
@@ -83,10 +89,18 @@ function mapLegacyErrorCode(
 			};
 
 		// Cuotas
+		case "CREDITO_NO_ENCONTRADO":
+			return { status: 404, code: message, message: "Crédito no encontrado" };
 		case "CUOTA_NO_ENCONTRADA":
 			return { status: 404, code: message, message: "Cuota no encontrada" };
 		case "CUOTA_YA_PAGADA":
 			return { status: 400, code: message, message: "La cuota ya está pagada" };
+		case "CUOTA_NO_PAGABLE":
+			return {
+				status: 400,
+				code: message,
+				message: "La cuota no se puede pagar en su estado actual",
+			};
 		case "MONTO_INVALIDO":
 			return { status: 400, code: message, message: "El monto debe ser mayor a 0" };
 		case "MONTO_SUPERA_SALDO_CUOTA":

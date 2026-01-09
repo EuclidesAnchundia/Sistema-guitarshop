@@ -26,6 +26,12 @@ npx prisma migrate deploy
 npm run dev
 ```
 
+Si ya importaste `guitarshop.sql` (BD con tablas existentes) y solo necesitas sincronizar cambios del `schema.prisma` (por ejemplo `credito.estado_credito`), usa:
+
+```bash
+npx prisma db push
+```
+
 Servidor por defecto: http://localhost:3000
 
 ## Estructura (Clean Architecture pragmática)

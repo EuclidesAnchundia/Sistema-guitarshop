@@ -1,6 +1,7 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { ensureEstadoRegistroActivo } from "../../../shared/prisma/estadoRegistro";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -14,13 +15,15 @@ export async function hashPassword(plainPassword: string): Promise<string> {
 }
 
 export async function loginUsuario(email: string, password: string) {
+  const estadoActivo = await ensureEstadoRegistroActivo();
+
   // Busca usuario por correo
   const user = await prisma.usuario.findUnique({
     where: { correo: email },
   });
 
   // Si no existe o está inactivo
-  if (!user || user.id_estado !== 1) return null;
+  if (!user || user.id_estado !== estadoActivo.id_estado) return null;
 
   // Compara contraseña enviada con el password_hash de la BD
   const passwordOk = await bcrypt.compare(password, user.password_hash);

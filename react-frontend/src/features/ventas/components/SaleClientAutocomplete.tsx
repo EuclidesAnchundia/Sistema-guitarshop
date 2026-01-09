@@ -12,16 +12,6 @@ type Props = {
   disabled?: boolean
 }
 
-function matchesCliente(c: ClienteOption, q: string) {
-  const value = q.trim().toLowerCase()
-  if (!value) return false
-  return (
-    c.nombres.toLowerCase().includes(value) ||
-    c.apellidos.toLowerCase().includes(value) ||
-    c.cedula.toLowerCase().includes(value)
-  )
-}
-
 export function SaleClientAutocomplete({
   clientes,
   onSelectCliente,
@@ -35,11 +25,26 @@ export function SaleClientAutocomplete({
 
   const debounced = useDebouncedValue(query)
 
+  const clientesIndex = useMemo(() => {
+    return clientes.map((c) => ({
+      cliente: c,
+      search: `${c.nombres} ${c.apellidos} ${c.cedula}`.toLowerCase(),
+    }))
+  }, [clientes])
+
   const suggestions = useMemo(() => {
-    const trimmed = debounced.trim()
+    const trimmed = debounced.trim().toLowerCase()
     if (trimmed.length < 1) return []
-    return clientes.filter((c) => matchesCliente(c, trimmed)).slice(0, 8)
-  }, [debounced, clientes])
+
+    const results: ClienteOption[] = []
+    for (const entry of clientesIndex) {
+      if (entry.search.includes(trimmed)) {
+        results.push(entry.cliente)
+        if (results.length >= 8) break
+      }
+    }
+    return results
+  }, [debounced, clientesIndex])
 
   useEffect(() => {
     if (suggestions.length > 0 && open) {
