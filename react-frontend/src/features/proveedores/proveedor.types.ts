@@ -6,6 +6,8 @@ export type ProveedorRecord = {
 	telefono: string | null
 	direccion: string | null
 	fecha_registro: string
+	// El backend expone id_estado, pero el UI debe ser tolerante si no viene.
+	id_estado?: number
 }
 
 export type SortValue =
@@ -14,11 +16,16 @@ export type SortValue =
 	| "date_asc"
 	| "date_desc"
 
+export type ProveedorEstadoFilter = "all" | "active" | "inactive"
+export type ProveedorIdTypeFilter = "all" | "ruc" | "cedula"
+
 export type ProveedoresFilters = {
+	estado: ProveedorEstadoFilter
+	tipoId: ProveedorIdTypeFilter
+	fechaDesde: string
+	fechaHasta: string
 	orden: SortValue
 }
-
-export type ProveedoresViewMode = "table" | "cards"
 
 export type ProveedorPayload = {
 	nombre_proveedor: string
