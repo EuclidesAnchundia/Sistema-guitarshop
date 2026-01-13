@@ -1,4 +1,4 @@
-// guitarshop-backend/app/api/compras/route.ts
+// guitarshop-backend/app/api/compra/route.ts
 import { jsonCors, optionsCors } from "../../../lib/cors";
 import { verifyToken } from "../../../lib/auth";
 import {
@@ -10,7 +10,7 @@ export async function OPTIONS() {
   return optionsCors();
 }
 
-// GET /api/compras  (lista cabeceras)
+// GET /api/compra  (lista cabeceras)
 export async function GET(req: Request) {
   const auth = verifyToken(req);
   if (!auth.valid) {
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/compras  (crear compra completa)
+// POST /api/compra  (crear compra completa)
 export async function POST(req: Request) {
   const auth = verifyToken(req);
   if (!auth.valid || !auth.userId) {

@@ -30,7 +30,7 @@ export function toNumberSafe(value: unknown): number {
 
 	// Maneja casos raros (boolean, objects) sin romper.
 	try {
-		const parsed = Number(value as any)
+		const parsed = Number(value as string | number | bigint | boolean)
 		return Number.isFinite(parsed) ? parsed : 0
 	} catch {
 		return 0

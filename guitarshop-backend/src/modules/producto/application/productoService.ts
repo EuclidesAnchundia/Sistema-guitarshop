@@ -15,7 +15,7 @@ const toNumberOrNull = (
     const parsed = decimal.toNumber();
     return Number.isFinite(parsed) ? parsed : null;
   }
-  const fallback = Number(value as unknown as any);
+  const fallback = Number(String(value));
   return Number.isFinite(fallback) ? fallback : null;
 };
 

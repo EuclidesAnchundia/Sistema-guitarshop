@@ -1,5 +1,6 @@
 import jsPDF from "jspdf"
 import "jspdf-autotable"
+import autoTable, { type UserOptions } from "jspdf-autotable"
 import * as XLSX from "xlsx"
 
 export type ExportRow = {
@@ -39,13 +40,15 @@ export function exportToPDF(rows: ExportRow[], baseName: string) {
 	const tableColumns = ["ID Compra", "Proveedor", "Fecha Compra", "Total", "Fecha Registro"]
 	const tableRows = rows.map(row => Object.values(row))
 
-	;(doc as any).autoTable({
+	const options: UserOptions = {
 		head: [tableColumns],
 		body: tableRows,
 		startY: 30,
 		styles: { fontSize: 8 },
 		headStyles: { fillColor: [41, 128, 185] },
-	})
+	}
+
+	autoTable(doc, options)
 
 	doc.save(`${baseName}.pdf`)
 }

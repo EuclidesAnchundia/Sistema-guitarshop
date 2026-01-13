@@ -574,6 +574,7 @@ export default function ProductsPage() {
 	}, [productos])
 
 	const kpiNoSales30d = useMemo(() => {
+		void salesQueriesVersion
 		return productos.filter((p) => getCachedSalesStatus(p.id_producto) === "NO_SALES_30D").length
 	}, [productos, getCachedSalesStatus, salesQueriesVersion])
 
@@ -906,6 +907,7 @@ export default function ProductsPage() {
 	const normalizedSearch = useMemo(() => debouncedSearchInput.trim().toLowerCase(), [debouncedSearchInput])
 
 	const indexedProducts = useMemo(() => {
+		void salesQueriesVersion
 		return productos.map((producto) => {
 			const codigoLower = producto.codigo_producto.toLowerCase()
 			const nombreLower = producto.nombre_producto.toLowerCase()

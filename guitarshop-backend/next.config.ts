@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Evita que el bundler intente empaquetar dependencias server-only problemáticas.
+  serverExternalPackages: ["prisma", "@prisma/client"],
 };
 
 export default nextConfig;

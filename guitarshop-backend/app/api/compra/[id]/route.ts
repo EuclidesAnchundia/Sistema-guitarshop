@@ -1,4 +1,4 @@
-// guitarshop-backend/app/api/compras/[id]/route.ts
+// guitarshop-backend/app/api/compra/[id]/route.ts
 import { jsonCors, optionsCors } from "../../../../lib/cors";
 import { verifyToken } from "../../../../lib/auth";
 import { obtenerCompraPorId } from "../../../../lib/services/compraService";
@@ -15,7 +15,7 @@ function getIdFromUrl(req: Request): number | null {
   return Number.isNaN(id) ? null : id;
 }
 
-// GET /api/compras/:id  (cabecera + detalle)
+// GET /api/compra/:id  (cabecera + detalle)
 export async function GET(req: Request) {
   const auth = verifyToken(req);
   if (!auth.valid) {
