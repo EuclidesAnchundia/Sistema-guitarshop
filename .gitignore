@@ -35,8 +35,6 @@ coverage/
 # Solo el cliente generado (si usas output custom)
 generated/
 
-# ⚠️ NO IGNORAR migraciones
-# prisma/migrations/   <-- ESTO NO VA IGNORADO
 
 # ========================
 # IDE / SISTEMA
