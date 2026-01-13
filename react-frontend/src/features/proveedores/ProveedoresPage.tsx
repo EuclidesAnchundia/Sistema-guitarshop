@@ -9,25 +9,21 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
 	AlertCircle,
 	Building2,
-	Edit2,
+	Eye,
 	Loader2,
-	Mail,
-	MapPin,
-	Phone,
+	MoreHorizontal,
+	Plus,
 	Trash2,
 } from "lucide-react"
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
-import { api } from "../../lib/apiClient"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
 import { detectEcuadorIdType, formatEcuadorIdTypeLabel, validateEcuadorId } from "./ecuadorId"
 
-import type { ProveedoresFilters, ProveedoresViewMode } from "./proveedor.types"
+import type { ProveedoresFilters } from "./proveedor.types"
 import type { ProveedorPayload, ProveedorRecord } from "./proveedor.types"
 import { proveedorClient } from "./proveedor.client"
 import { matchesProveedorSearch } from "./proveedor.utils"
 import { proveedoresQueryKey, useProveedoresQuery } from "./useProveedoresQuery"
-import { exportToCSV, exportToXLSX, exportToPDF, type ExportRow } from "./exportProveedores"
 
 import { ProveedoresFiltersDrawer } from "./components/ProveedoresFiltersDrawer"
 import { ProveedoresListHeader } from "./components/ProveedoresListHeader"
@@ -39,9 +35,9 @@ type ApiErrorResponse = {
 }
 
 const PAGE_SIZE_STORAGE_KEY = "proveedores.pageSize"
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40] as const
 type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
-const DEFAULT_PAGE_SIZE: PageSizeOption = 25
+const DEFAULT_PAGE_SIZE: PageSizeOption = 20
 
 const proveedorSchema = z.object({
 	nombre_proveedor: z.string().trim().min(3, "El nombre es obligatorio").max(100, "Máximo 100 caracteres"),
@@ -116,26 +112,17 @@ export default function ProveedoresPage() {
 	const [currentPage, setCurrentPage] = useState(1)
 	const [searchInput, setSearchInput] = useState("")
 	const [filters, setFilters] = useState<ProveedoresFilters>(defaultFilters)
-	const [viewMode, setViewMode] = useState<ProveedoresViewMode>("table")
 
 	const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false)
 	const [createDialogOpen, setCreateDialogOpen] = useState(false)
 	const [editDialogOpen, setEditDialogOpen] = useState(false)
 	const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
-	const [exportDialogOpen, setExportDialogOpen] = useState(false)
-
-	const [exportScope, setExportScope] = useState<"page" | "filtered" | "all">("filtered")
-	const [exportFormat, setExportFormat] = useState<"csv" | "xlsx" | "pdf">("xlsx")
-	const [exportStatus, setExportStatus] = useState<"idle" | "exporting" | "done">("idle")
-	const [exportError, setExportError] = useState<string | null>(null)
-
 	const [selectedProveedor, setSelectedProveedor] = useState<ProveedorRecord | null>(null)
 	const [editingProveedor, setEditingProveedor] = useState<ProveedorRecord | null>(null)
 
 	const debouncedSearch = useDebouncedValue(searchInput, 300)
 
 	const proveedoresQuery = useProveedoresQuery()
-	const proveedores = useMemo(() => proveedoresQuery.data ?? [], [proveedoresQuery.data])
 
 	const createMutation = useMutation({
 		mutationFn: (payload: ProveedorPayload) => proveedorClient.create(payload),
@@ -182,10 +169,27 @@ export default function ProveedoresPage() {
 		setCurrentPage(1)
 	}, [debouncedSearch, filters, pageSize])
 
+	// Cierra el menú de acciones (⋯) al hacer click fuera.
+	useEffect(() => {
+		const handlePointerDownCapture = (event: PointerEvent) => {
+			const target = event.target
+			if (!(target instanceof Element)) return
+			if (target.closest("[data-proveedores-actions-menu]")) return
+			document.querySelectorAll<HTMLDetailsElement>("[data-proveedores-actions-menu][open]").forEach((node) => {
+				node.open = false
+			})
+		}
+
+		document.addEventListener("pointerdown", handlePointerDownCapture, true)
+		return () => {
+			document.removeEventListener("pointerdown", handlePointerDownCapture, true)
+		}
+	}, [])
+
 	const filteredProveedores = useMemo(() => {
 		if (!proveedoresQuery.data) return []
 
-		let result = proveedoresQuery.data.filter((proveedor) => matchesProveedorSearch(proveedor, debouncedSearch))
+		const result = proveedoresQuery.data.filter((proveedor) => matchesProveedorSearch(proveedor, debouncedSearch))
 
 		// Aplicar ordenamiento
 		result.sort((a, b) => {
@@ -212,7 +216,7 @@ export default function ProveedoresPage() {
 		return filteredProveedores.slice(start, end)
 	}, [filteredProveedores, currentPage, pageSize])
 
-	const totalPages = Math.ceil(filteredProveedores.length / pageSize)
+	const totalPages = Math.max(1, Math.ceil(filteredProveedores.length / pageSize))
 
 	const filterChips = useMemo(() => {
 		const chips: { key: "orden"; label: string }[] = []
@@ -285,100 +289,69 @@ export default function ProveedoresPage() {
 		setEditDialogOpen(true)
 	}, [editForm])
 
-	const getSourceForExport = async (scope: "page" | "filtered" | "all") => {
-		if (scope === "page") return paginatedProveedores
-		if (scope === "filtered") return filteredProveedores
-		// all
-		if (proveedoresQuery.data) return proveedores
-		const fetched = await queryClient.fetchQuery({
-			queryKey: ["proveedores"],
-			queryFn: async () => {
-				const { data } = await api.get<ProveedorRecord[]>("/proveedor")
-				return Array.isArray(data) ? data : []
-			}
-		})
-		return fetched ?? []
-	}
-
-	const buildExportRows = (records: ProveedorRecord[]): ExportRow[] => {
-		return records.map((proveedor) => ({
-			"ID Proveedor": proveedor.id_proveedor.toString(),
-			"Nombre": proveedor.nombre_proveedor,
-			"Cédula/RUC": proveedor.ruc_cedula,
-			"Correo": proveedor.correo || "",
-			"Teléfono": proveedor.telefono || "",
-			"Dirección": proveedor.direccion || "",
-			"Fecha Registro": dateFormatter.format(new Date(proveedor.fecha_registro)),
-		}))
-	}
-
-	const runExport = async (): Promise<boolean> => {
-		setExportError(null)
-		setExportStatus("exporting")
-		try {
-			const source = await getSourceForExport(exportScope)
-			const rows = buildExportRows(source)
-			if (rows.length === 0) {
-				setExportError("No hay proveedores para exportar")
-				setExportStatus("idle")
-				return false
-			}
-			const filenameBase = `proveedores_${exportScope}_${new Date().toISOString().split('T')[0]}`
-			switch (exportFormat) {
-				case "csv":
-					exportToCSV(rows, filenameBase)
-					break
-				case "xlsx":
-					exportToXLSX(rows, filenameBase)
-					break
-				case "pdf":
-					exportToPDF(rows, filenameBase)
-					break
-			}
-			setExportStatus("done")
-			return true
-		} catch (error) {
-			setExportError("No se pudo exportar")
-			setExportStatus("idle")
-			return false
-		}
-	}
-
-	const startItem = (currentPage - 1) * pageSize + 1
-	const endItem = Math.min(currentPage * pageSize, filteredProveedores.length)
+	const startItem = filteredProveedores.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+	const endItem =
+		filteredProveedores.length === 0
+			? 0
+			: Math.min(filteredProveedores.length, (currentPage - 1) * pageSize + paginatedProveedores.length)
 
 	return (
-		<div className="space-y-8">
-			<header className="flex flex-wrap items-center justify-between gap-3">
-				<div>
-					<p className="text-xs uppercase tracking-wide text-slate-500">Gestión</p>
-					<h1 className="text-3xl font-semibold text-slate-900">Proveedores</h1>
-					<p className="mt-1 text-sm text-slate-500">Administra la información de tus proveedores.</p>
+		<div className="space-y-6">
+			<section aria-labelledby="proveedores-encabezado" className="rounded-3xl border border-slate-200 bg-white p-6">
+				<div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+					<div>
+						<p id="proveedores-encabezado" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+							GESTIÓN
+						</p>
+						<h1 className="mt-1 text-3xl font-semibold text-slate-900">Proveedores</h1>
+						<p className="mt-1 text-sm text-slate-500">Gestiona altas, ediciones y consulta de proveedores en el sistema.</p>
+					</div>
+					<div className="flex flex-col items-center gap-2">
+						<p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones rápidas</p>
+						<button
+							type="button"
+							onClick={() => setCreateDialogOpen(true)}
+							className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+							aria-label="Nuevo proveedor"
+						>
+							<Plus className="h-4 w-4" />
+							+ Nuevo proveedor
+						</button>
+					</div>
 				</div>
-			</header>
+			</section>
 
-			<section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-				<article className="rounded-2xl border border-slate-200 bg-white p-5">
-					<p className="text-xs uppercase text-slate-500">Proveedores registrados</p>
-					<p className="mt-2 text-3xl font-semibold text-slate-900">{filteredProveedores.length}</p>
-					<p className="text-sm text-slate-500">Total en el sistema</p>
-				</article>
-				<article className="rounded-2xl border border-slate-200 bg-white p-5">
-					<p className="text-xs uppercase text-slate-500">Proveedores activos</p>
-					<p className="mt-2 text-3xl font-semibold text-blue-600">{filteredProveedores.length}</p>
-					<p className="text-sm text-slate-500">Disponibles para compras</p>
-				</article>
-				<article className="rounded-2xl border border-slate-200 bg-white p-5">
-					<p className="text-xs uppercase text-slate-500">Nuevos este mes</p>
-					<p className="mt-2 text-3xl font-semibold text-purple-600">
-						{filteredProveedores.filter(p => {
-							const regDate = new Date(p.fecha_registro)
-							const now = new Date()
-							return regDate.getMonth() === now.getMonth() && regDate.getFullYear() === now.getFullYear()
-						}).length}
+			<section aria-labelledby="proveedores-resumen" className="space-y-3">
+				<div className="flex items-center justify-between">
+					<p id="proveedores-resumen" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+						Resumen
 					</p>
-					<p className="text-sm text-slate-500">Registrados recientemente</p>
-				</article>
+				</div>
+				<div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+					<article className="rounded-2xl border border-slate-200 bg-white p-5">
+						<p className="text-xs uppercase text-slate-500">Proveedores registrados</p>
+						<p className="mt-2 text-3xl font-semibold text-slate-900">{filteredProveedores.length}</p>
+						<p className="text-sm text-slate-500">Total en el sistema</p>
+					</article>
+					<article className="rounded-2xl border border-slate-200 bg-white p-5">
+						<p className="text-xs uppercase text-slate-500">Proveedores activos</p>
+						<p className="mt-2 text-3xl font-semibold text-emerald-700">{filteredProveedores.length}</p>
+						<p className="text-sm text-slate-500">Disponibles para compras</p>
+					</article>
+					<article className="rounded-2xl border border-slate-200 bg-white p-5">
+						<p className="text-xs uppercase text-slate-500">Nuevos este mes</p>
+						<p className="mt-2 text-3xl font-semibold text-purple-700">
+							{
+								filteredProveedores.filter((proveedor) => {
+									const regDate = new Date(proveedor.fecha_registro)
+									const now = new Date()
+									return regDate.getMonth() === now.getMonth() && regDate.getFullYear() === now.getFullYear()
+								}).length
+							}
+						</p>
+						<p className="text-sm text-slate-500">Registrados recientemente</p>
+					</article>
+				</div>
 			</section>
 
 			{proveedoresQuery.isError && (
@@ -398,45 +371,57 @@ export default function ProveedoresPage() {
 					searchInput={searchInput}
 					onSearchInputChange={setSearchInput}
 					onOpenFilters={() => setFiltersDrawerOpen(true)}
-					viewMode={viewMode}
-					onChangeViewMode={setViewMode}
-					pageSize={pageSize}
-					onChangePageSize={(next) => {
-						setPageSize(next as PageSizeOption)
-						setCurrentPage(1)
-					}}
-					onOpenCreate={() => setCreateDialogOpen(true)}
-					onOpenExport={() => setExportDialogOpen(true)}
 					filterChips={filterChips}
 					onRemoveChip={(key) => {
 						if (key === "orden") {
 							setFilters((prev) => ({ ...prev, orden: defaultFilters.orden }))
 						}
 					}}
-					onClearAllFilters={() => setFilters(defaultFilters)}
+					onClearAllFilters={() => {
+						setFilters(defaultFilters)
+						setSearchInput("")
+					}}
 				/>
 
-				{viewMode === "table" ? (
-					<div className="overflow-x-auto">
-						<table className="min-w-full divide-y divide-slate-200">
-							<thead className="bg-slate-50">
-								<tr>
-									<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-										Proveedor
-									</th>
-									<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-										Contacto
-									</th>
-									<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-										Fecha Registro
-									</th>
-									<th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-										Acciones
-									</th>
-								</tr>
-							</thead>
-							<tbody className="divide-y divide-slate-200 bg-white">
-								{paginatedProveedores.map((proveedor) => (
+				<div className="overflow-x-auto">
+					<table className="min-w-full divide-y divide-slate-200">
+						<thead className="bg-slate-50">
+							<tr>
+								<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+									Proveedor
+								</th>
+								<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+									Contacto
+								</th>
+								<th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+									Fecha de registro
+								</th>
+								<th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+									Acciones
+								</th>
+							</tr>
+						</thead>
+						<tbody className="divide-y divide-slate-200 bg-white">
+							{proveedoresQuery.isLoading && proveedoresQuery.data === undefined
+								? Array.from({ length: Math.min(pageSize, 8) }).map((_, index) => (
+									<tr key={`proveedores-skeleton-${index}`} className="animate-pulse">
+										<td className="px-6 py-4">
+											<div className="h-4 w-48 rounded bg-slate-100" />
+											<div className="mt-2 h-3 w-40 rounded bg-slate-100" />
+										</td>
+										<td className="px-6 py-4">
+											<div className="h-3 w-56 rounded bg-slate-100" />
+											<div className="mt-2 h-3 w-44 rounded bg-slate-100" />
+										</td>
+										<td className="px-6 py-4">
+											<div className="h-3 w-28 rounded bg-slate-100" />
+										</td>
+										<td className="px-6 py-4 text-right">
+											<div className="ml-auto h-10 w-24 rounded-lg bg-slate-100" />
+										</td>
+									</tr>
+								))
+								: paginatedProveedores.map((proveedor) => (
 									<tr key={proveedor.id_proveedor} className="hover:bg-slate-50">
 										<td className="px-6 py-4">
 											<div className="flex items-center gap-3">
@@ -444,157 +429,138 @@ export default function ProveedoresPage() {
 													<Building2 className="h-5 w-5 text-slate-600" />
 												</div>
 												<div>
-													<p className="font-medium text-slate-900">
-														{proveedor.nombre_proveedor}
-													</p>
-													<p className="text-sm text-slate-500">
+													<p className="text-sm font-semibold text-slate-900">{proveedor.nombre_proveedor}</p>
+													<p className="text-xs text-slate-500">
 														{proveedor.ruc_cedula} ({formatEcuadorIdTypeLabel(detectEcuadorIdType(proveedor.ruc_cedula))})
 													</p>
 												</div>
 											</div>
 										</td>
-										<td className="px-6 py-4">
-											<div className="space-y-1">
-												{proveedor.correo && (
-													<div className="flex items-center gap-2 text-sm text-slate-600">
-														<Mail className="h-4 w-4" />
-														{proveedor.correo}
-													</div>
-												)}
-												{proveedor.telefono && (
-													<div className="flex items-center gap-2 text-sm text-slate-600">
-														<Phone className="h-4 w-4" />
-														{proveedor.telefono}
-													</div>
-												)}
-												{proveedor.direccion && (
-													<div className="flex items-center gap-2 text-sm text-slate-600">
-														<MapPin className="h-4 w-4" />
-														{proveedor.direccion}
-													</div>
-												)}
-											</div>
+										<td className="px-6 py-4 text-sm text-slate-700">
+											{proveedor.correo && <p className="text-xs text-slate-500">{proveedor.correo}</p>}
+											{proveedor.telefono && <p className="text-xs text-slate-500">{proveedor.telefono}</p>}
+											{proveedor.direccion && <p className="text-xs text-slate-500">{proveedor.direccion}</p>}
+											{!proveedor.correo && !proveedor.telefono && !proveedor.direccion ? (
+												<p className="text-xs text-slate-500">—</p>
+											) : null}
 										</td>
 										<td className="px-6 py-4 text-sm text-slate-600">
 											{dateFormatter.format(new Date(proveedor.fecha_registro))}
 										</td>
 										<td className="px-6 py-4 text-right">
-											<div className="flex items-center justify-end gap-2">
+											<div className="inline-flex items-center justify-end gap-2">
 												<button
+													type="button"
 													onClick={() => handleOpenDetail(proveedor)}
-													className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
+													className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+													aria-label={`Ver proveedor ${proveedor.nombre_proveedor}`}
 												>
-													<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-														<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-													</svg>
+													<Eye className="h-3.5 w-3.5" /> Ver
 												</button>
-												<button
-													onClick={() => handleOpenEdit(proveedor)}
-													className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
-												>
-													<Edit2 className="h-4 w-4" />
-												</button>
-												<button
-													onClick={() => handleDelete(proveedor)}
-													className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-sm font-medium text-red-600 shadow-sm transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-950"
-												>
-													<Trash2 className="h-4 w-4" />
-												</button>
+
+												<details className="relative inline-block text-left" data-proveedores-actions-menu>
+													<summary
+														className="inline-flex h-10 w-10 list-none items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+														aria-label={`Más acciones para ${proveedor.nombre_proveedor}`}
+														onClick={(event) => {
+															event.stopPropagation()
+														}}
+													>
+														<MoreHorizontal className="h-5 w-5" />
+													</summary>
+													<div
+														className="absolute right-0 z-10 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm"
+														onClick={(event) => {
+															const details = (event.currentTarget.parentElement ?? null) as HTMLDetailsElement | null
+															if (details) details.open = false
+														}}
+													>
+														<button
+															type="button"
+															onClick={(event) => {
+																event.stopPropagation()
+																handleOpenEdit(proveedor)
+															}}
+															className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+														>
+															Editar
+														</button>
+
+														<button
+															type="button"
+															onClick={(event) => {
+																event.stopPropagation()
+																handleDelete(proveedor)
+															}}
+															className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-700 hover:bg-red-50"
+														>
+															<span className="inline-flex items-center gap-1">
+																<Trash2 className="h-3.5 w-3.5" /> Eliminar
+															</span>
+														</button>
+													</div>
+												</details>
 											</div>
 										</td>
 									</tr>
 								))}
-							</tbody>
-						</table>
-					</div>
-				) : (
-					<div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 lg:grid-cols-3">
-						{paginatedProveedores.map((proveedor) => (
-							<div key={proveedor.id_proveedor} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition">
-								<div className="flex items-start justify-between">
-									<div>
-										<p className="font-semibold text-slate-900">{proveedor.nombre_proveedor}</p>
-										<p className="text-sm text-slate-500">
-											{proveedor.ruc_cedula} ({formatEcuadorIdTypeLabel(detectEcuadorIdType(proveedor.ruc_cedula))})
-										</p>
-									</div>
-									<button
-										onClick={() => handleOpenDetail(proveedor)}
-										className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-									>
-										<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-											<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-										</svg>
-									</button>
-								</div>
-								<div className="mt-3 space-y-2">
-									{proveedor.correo && (
-										<p className="text-sm text-slate-700">
-											<span className="font-medium">Correo:</span> {proveedor.correo}
-										</p>
-									)}
-									{proveedor.telefono && (
-										<p className="text-sm text-slate-700">
-											<span className="font-medium">Teléfono:</span> {proveedor.telefono}
-										</p>
-									)}
-									<p className="text-sm text-slate-700">
-										<span className="font-medium">Registro:</span> {dateFormatter.format(new Date(proveedor.fecha_registro))}
-									</p>
-								</div>
-							</div>
-						))}
-					</div>
-				)}
+						</tbody>
+					</table>
+				</div>
 
-				{/* Estados de carga y vacío */}
-				{proveedoresQuery.isLoading && (
-					<div className="flex items-center justify-center gap-2 p-6 text-slate-500">
-						<Loader2 className="h-4 w-4 animate-spin" />
-						Cargando proveedores...
-					</div>
-				)}
-
-				{!proveedoresQuery.isLoading && paginatedProveedores.length === 0 && filteredProveedores.length === 0 && (
+				{!proveedoresQuery.isLoading && filteredProveedores.length === 0 && (
 					<div className="p-8 text-center text-slate-500">
 						<Building2 size={36} className="mx-auto mb-2 opacity-50" />
-						<p>No hay proveedores registrados.</p>
+						{searchInput.trim() || filterChips.length ? "Sin resultados para los filtros actuales." : "Aún no registras proveedores."}
 					</div>
 				)}
 
-				{!proveedoresQuery.isLoading && paginatedProveedores.length === 0 && filteredProveedores.length > 0 && (
-					<div className="p-8 text-center text-slate-500">
-						<Building2 size={36} className="mx-auto mb-2 opacity-50" />
-						<p>No se encontraron proveedores con los filtros aplicados.</p>
-					</div>
-				)}
+				<div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
+					<div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
 
-				{/* Paginación */}
-				{totalPages > 1 && (
-					<div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3">
-						<div className="flex items-center gap-2">
-							<button
-								onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-								disabled={currentPage === 1}
-								className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								Anterior
-							</button>
-							<span className="text-sm text-slate-600">
-								Página {currentPage} de {totalPages}
-							</span>
-							<button
-								onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-								disabled={currentPage === totalPages}
-								className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
-							>
-								Siguiente
-							</button>
-						</div>
+					<div className="flex items-center gap-2">
+						<button
+							type="button"
+							onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+							disabled={currentPage <= 1}
+							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Anterior
+						</button>
+						<span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
+							{currentPage}
+						</span>
+						<button
+							type="button"
+							onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+							disabled={currentPage >= totalPages}
+							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							Siguiente
+						</button>
 					</div>
-				)}
+
+					<div className="inline-flex items-center gap-3">
+						<label htmlFor="proveedores-page-size-bottom" className="text-sm font-semibold text-slate-800">
+							Por página
+						</label>
+						<select
+							id="proveedores-page-size-bottom"
+							value={String(pageSize)}
+							onChange={(event) => {
+								setPageSize(Number(event.target.value) as PageSizeOption)
+								setCurrentPage(1)
+							}}
+							className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+						>
+							{PAGE_SIZE_OPTIONS.map((opt) => (
+								<option key={opt} value={opt}>
+									{opt}
+								</option>
+							))}
+						</select>
+					</div>
+				</div>
 			</section>
 
 			{/* Drawers y Dialogs */}
@@ -821,136 +787,6 @@ export default function ProveedoresPage() {
 				</div>
 			)}
 
-			{/* Export Dialog */}
-			<Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
-				<DialogContent className="max-w-3xl" disableOutsideClose hideCloseButton>
-					<DialogHeader>
-						<DialogTitle>Exportar proveedores</DialogTitle>
-						<DialogDescription>Selecciona el alcance y el formato de exportación.</DialogDescription>
-					</DialogHeader>
-
-					<div className="grid gap-6 md:grid-cols-2">
-						<div className="grid gap-3">
-							<p className="text-sm font-semibold text-slate-900">Alcance</p>
-							<div className="grid gap-2">
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-scope"
-										checked={exportScope === "page"}
-										onChange={() => setExportScope("page")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">Página actual</p>
-										<p className="text-xs text-slate-500">Lo visible en pantalla según la paginación actual.</p>
-									</div>
-								</label>
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-scope"
-										checked={exportScope === "filtered"}
-										onChange={() => setExportScope("filtered")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">Filtradas</p>
-										<p className="text-xs text-slate-500">Aplica búsqueda + filtros + orden, sin importar página.</p>
-									</div>
-								</label>
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-scope"
-										checked={exportScope === "all"}
-										onChange={() => setExportScope("all")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">Todo</p>
-										<p className="text-xs text-slate-500">Ignora filtros y exporta todos los proveedores.</p>
-									</div>
-								</label>
-							</div>
-						</div>
-
-						<div className="grid gap-3">
-							<p className="text-sm font-semibold text-slate-900">Formato</p>
-							<div className="grid gap-2">
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-format"
-										checked={exportFormat === "csv"}
-										onChange={() => setExportFormat("csv")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">CSV</p>
-										<p className="text-xs text-slate-500">Compatible con Excel (separador ;).</p>
-									</div>
-								</label>
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-format"
-										checked={exportFormat === "xlsx"}
-										onChange={() => setExportFormat("xlsx")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">Excel (.xlsx)</p>
-										<p className="text-xs text-slate-500">Hoja "Proveedores" con columnas formateadas.</p>
-									</div>
-								</label>
-								<label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 hover:bg-slate-50">
-									<input
-										type="radio"
-										name="export-format"
-										checked={exportFormat === "pdf"}
-										onChange={() => setExportFormat("pdf")}
-										className="mt-1"
-									/>
-									<div>
-										<p className="text-sm font-semibold text-slate-900">PDF</p>
-										<p className="text-xs text-slate-500">Tabla en PDF (landscape).</p>
-									</div>
-								</label>
-							</div>
-						</div>
-					</div>
-
-					{exportError && (
-						<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{exportError}</div>
-					)}
-
-					<DialogFooter>
-						<button
-							type="button"
-							onClick={() => {
-								if (exportStatus === "exporting") return
-								setExportDialogOpen(false)
-							}}
-							disabled={exportStatus === "exporting"}
-							className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							Cancelar
-						</button>
-						<button
-							type="button"
-							onClick={async () => {
-								const ok = await runExport()
-								if (ok) setExportDialogOpen(false)
-							}}
-							disabled={exportStatus === "exporting"}
-							className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							{exportStatus === "exporting" ? "Exportando…" : exportStatus === "done" ? "Listo" : "Aceptar"}
-						</button>
-					</DialogFooter>
-				</DialogContent>
-			</Dialog>
 		</div>
 	)
 }
