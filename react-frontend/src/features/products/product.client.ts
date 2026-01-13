@@ -11,29 +11,41 @@ import type {
 
 const SALES_CONCURRENCY = 6
 
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function toNumberOr(value: unknown, fallback = 0): number {
+	const parsed = typeof value === "number" ? value : Number(value)
+	return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function toNullableNumber(value: unknown): number | null {
+	if (value === null || value === undefined) return null
+	const parsed = typeof value === "number" ? value : Number(value)
+	return Number.isFinite(parsed) ? parsed : null
+}
+
 export const productClient = {
 	async list(): Promise<ProductoRecord[]> {
 		const { data } = await api.get<ProductoRecord[]>("/producto")
 		if (!Array.isArray(data)) return []
 		return data.map((item) => ({
 			...item,
-			precio_compra: Number((item as any).precio_compra ?? 0),
-			precio_venta: Number((item as any).precio_venta ?? 0),
+			precio_compra: toNumberOr(asRecord(item).precio_compra, 0),
+			precio_venta: toNumberOr(asRecord(item).precio_venta, 0),
 			costo: (() => {
-				const raw = (item as any).costo
-				if (raw === null || raw === undefined) return null
-				const parsed = Number(raw)
-				return Number.isFinite(parsed) ? parsed : null
+				return toNullableNumber(asRecord(item).costo)
 			})(),
 			margen: (() => {
-				const raw = (item as any).margen
-				if (raw === null || raw === undefined) return null
-				const parsed = Number(raw)
-				return Number.isFinite(parsed) ? parsed : null
+				return toNullableNumber(asRecord(item).margen)
 			})(),
-			proveedor_nombre: (item as any).proveedor_nombre ?? null,
-			cantidad_stock: Number((item as any).cantidad_stock ?? 0),
-			stock_minimo: Number((item as any).stock_minimo ?? 0),
+			proveedor_nombre: (() => {
+				const value = asRecord(item).proveedor_nombre
+				return typeof value === "string" ? value : null
+			})(),
+			cantidad_stock: toNumberOr(asRecord(item).cantidad_stock, 0),
+			stock_minimo: toNumberOr(asRecord(item).stock_minimo, 0),
 		}))
 	},
 
@@ -150,17 +162,15 @@ export const productClient = {
 		if (!Array.isArray(data)) return []
 		return data.map((item) => ({
 			...item,
-			id_kardex: Number((item as any).id_kardex ?? 0),
-			id_producto: Number((item as any).id_producto ?? 0),
-			id_referencia:
-				(item as any).id_referencia === null || (item as any).id_referencia === undefined
-					? null
-					: Number((item as any).id_referencia),
-			cantidad: Number((item as any).cantidad ?? 0),
-			costo_unitario:
-				(item as any).costo_unitario === null || (item as any).costo_unitario === undefined
-					? null
-					: Number((item as any).costo_unitario),
+			id_kardex: toNumberOr(asRecord(item).id_kardex, 0),
+			id_producto: toNumberOr(asRecord(item).id_producto, 0),
+			id_referencia: (() => {
+				const value = asRecord(item).id_referencia
+				if (value === null || value === undefined) return null
+				return toNumberOr(value, 0)
+			})(),
+			cantidad: toNumberOr(asRecord(item).cantidad, 0),
+			costo_unitario: toNullableNumber(asRecord(item).costo_unitario),
 		}))
 	},
 }

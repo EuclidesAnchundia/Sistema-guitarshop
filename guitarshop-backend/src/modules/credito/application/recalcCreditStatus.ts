@@ -8,11 +8,34 @@ function dateOnlyUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-function isPaid(installment: { estado_cuota: string; fecha_pago: Date | null; monto_cuota: any; monto_pagado: any }): boolean {
+type AmountLike = Prisma.Decimal | number | string | null | undefined;
+
+function toNumberOrZero(value: AmountLike): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const maybeDecimal = value as unknown as { toNumber?: () => number };
+  if (typeof maybeDecimal.toNumber === "function") {
+    const parsed = maybeDecimal.toNumber();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  const parsed = Number(String(value));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isPaid(installment: {
+  estado_cuota: string;
+  fecha_pago: Date | null;
+  monto_cuota: AmountLike;
+  monto_pagado: AmountLike;
+}): boolean {
   if (installment.fecha_pago) return true;
   if (installment.estado_cuota === "PAGADA") return true;
-  const montoCuota = Number(installment.monto_cuota);
-  const montoPagado = Number(installment.monto_pagado);
+  const montoCuota = toNumberOrZero(installment.monto_cuota);
+  const montoPagado = toNumberOrZero(installment.monto_pagado);
   return Number.isFinite(montoCuota) && Number.isFinite(montoPagado) && montoPagado >= montoCuota;
 }
 

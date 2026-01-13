@@ -4,6 +4,12 @@ import { X } from "lucide-react"
 
 import type { CompraDetailRecord, ProductoCompraItem } from "../compra.types"
 
+function formatMoney(value: unknown): string {
+	const numeric = typeof value === "number" ? value : Number(value)
+	if (!Number.isFinite(numeric)) return "0.00"
+	return numeric.toFixed(2)
+}
+
 type ComprasDetailDrawerProps = {
 	open: boolean
 	compra: CompraDetailRecord | null
@@ -53,7 +59,7 @@ export function ComprasDetailDrawer({
 						</div>
 						<div>
 							<label className="text-sm font-medium text-slate-700">Total</label>
-							<p className="text-sm text-slate-900">${compra.total.toFixed(2)}</p>
+							<p className="text-sm text-slate-900">${formatMoney(compra.total)}</p>
 						</div>
 						<div>
 							<label className="text-sm font-medium text-slate-700">Fecha de Registro</label>
@@ -71,11 +77,11 @@ export function ComprasDetailDrawer({
 											<div>
 												<p className="font-medium text-slate-900">{detalle.producto.nombre_producto}</p>
 												<p className="text-sm text-slate-600">
-													Cantidad: {detalle.cantidad_compra} × ${detalle.costo_unitario.toFixed(2)}
+													Cantidad: {detalle.cantidad_compra} × ${formatMoney(detalle.costo_unitario)}
 												</p>
 											</div>
 											<div className="text-right">
-												<p className="font-medium text-slate-900">${detalle.subtotal.toFixed(2)}</p>
+												<p className="font-medium text-slate-900">${formatMoney(detalle.subtotal)}</p>
 											</div>
 										</div>
 									</div>

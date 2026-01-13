@@ -52,72 +52,92 @@ export type CreditDetail = {
 	installments: CreditInstallment[]
 }
 
-function normalizeCliente(raw: any): ClienteMini {
+function asRecord(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" ? (value as Record<string, unknown>) : {}
+}
+
+function asString(value: unknown, fallback = ""): string {
+	if (typeof value === "string") return value
+	if (value === null || value === undefined) return fallback
+	return String(value)
+}
+
+function normalizeCliente(raw: unknown): ClienteMini {
+	const r = asRecord(raw)
 	return {
-		id_cliente: toNumberSafe(raw?.id_cliente),
-		nombres: String(raw?.nombres ?? ""),
-		apellidos: String(raw?.apellidos ?? ""),
-		cedula: String(raw?.cedula ?? ""),
+		id_cliente: toNumberSafe(r.id_cliente),
+		nombres: asString(r.nombres),
+		apellidos: asString(r.apellidos),
+		cedula: asString(r.cedula),
 	}
 }
 
-function normalizeNextInstallment(raw: any): NextInstallment {
+function normalizeNextInstallment(raw: unknown): NextInstallment {
+	const r = asRecord(raw)
+	const status = typeof r.status === "string" ? r.status : ""
 	return {
-		id: toNumberSafe(raw?.id),
-		number: toNumberSafe(raw?.number),
-		dueDate: String(raw?.dueDate ?? ""),
-		amount: toNumberSafe(raw?.amount),
-		status: (raw?.status === "VENCIDA" || raw?.status === "PAGADA" ? raw.status : "PENDIENTE") as InstallmentStatus,
+		id: toNumberSafe(r.id),
+		number: toNumberSafe(r.number),
+		dueDate: asString(r.dueDate),
+		amount: toNumberSafe(r.amount),
+		status: (status === "VENCIDA" || status === "PAGADA" ? status : "PENDIENTE") as InstallmentStatus,
 	}
 }
 
-function normalizeCreditListItem(raw: any): CreditListItem {
+function normalizeCreditListItem(raw: unknown): CreditListItem {
+	const r = asRecord(raw)
+	const sale = asRecord(r.sale)
+	const status = typeof r.status === "string" ? r.status : ""
 	return {
-		id: toNumberSafe(raw?.id),
+		id: toNumberSafe(r.id),
 		sale: {
-			id: toNumberSafe(raw?.sale?.id),
-			code: String(raw?.sale?.code ?? ""),
+			id: toNumberSafe(sale.id),
+			code: asString(sale.code),
 		},
-		saldoPendiente: toNumberSafe(raw?.saldoPendiente),
-		status: (raw?.status === "EN_MORA" || raw?.status === "CANCELADO" ? raw.status : "ACTIVO") as CreditStatus,
-		cliente: normalizeCliente(raw?.cliente),
-		nextInstallment: raw?.nextInstallment ? normalizeNextInstallment(raw.nextInstallment) : null,
+		saldoPendiente: toNumberSafe(r.saldoPendiente),
+		status: (status === "EN_MORA" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
+		cliente: normalizeCliente(r.cliente),
+		nextInstallment: r.nextInstallment ? normalizeNextInstallment(r.nextInstallment) : null,
 	}
 }
 
-function normalizeInstallment(raw: any): CreditInstallment {
+function normalizeInstallment(raw: unknown): CreditInstallment {
+	const r = asRecord(raw)
+	const status = typeof r.status === "string" ? r.status : ""
 	return {
-		id: toNumberSafe(raw?.id),
-		number: toNumberSafe(raw?.number),
-		dueDate: String(raw?.dueDate ?? ""),
-		amount: toNumberSafe(raw?.amount),
-		paidAmount: toNumberSafe(raw?.paidAmount),
-		status: (raw?.status === "VENCIDA" || raw?.status === "PAGADA" ? raw.status : "PENDIENTE") as InstallmentStatus,
-		paidAt: raw?.paidAt ? String(raw.paidAt) : null,
+		id: toNumberSafe(r.id),
+		number: toNumberSafe(r.number),
+		dueDate: asString(r.dueDate),
+		amount: toNumberSafe(r.amount),
+		paidAmount: toNumberSafe(r.paidAmount),
+		status: (status === "VENCIDA" || status === "PAGADA" ? status : "PENDIENTE") as InstallmentStatus,
+		paidAt: r.paidAt ? asString(r.paidAt) : null,
 	}
 }
 
-function normalizeCreditDetail(raw: any): CreditDetail {
+function normalizeCreditDetail(raw: unknown): CreditDetail {
+	const r = asRecord(raw)
+	const status = typeof r.status === "string" ? r.status : ""
 	return {
-		id: toNumberSafe(raw?.id),
-		saleId: toNumberSafe(raw?.saleId),
-		saleCode: String(raw?.saleCode ?? ""),
-		cliente: normalizeCliente(raw?.cliente),
-		total: toNumberSafe(raw?.total),
-		saldoPendiente: toNumberSafe(raw?.saldoPendiente),
-		status: (raw?.status === "EN_MORA" || raw?.status === "CANCELADO" ? raw.status : "ACTIVO") as CreditStatus,
-		installments: Array.isArray(raw?.installments) ? raw.installments.map(normalizeInstallment) : [],
+		id: toNumberSafe(r.id),
+		saleId: toNumberSafe(r.saleId),
+		saleCode: asString(r.saleCode),
+		cliente: normalizeCliente(r.cliente),
+		total: toNumberSafe(r.total),
+		saldoPendiente: toNumberSafe(r.saldoPendiente),
+		status: (status === "EN_MORA" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
+		installments: Array.isArray(r.installments) ? r.installments.map(normalizeInstallment) : [],
 	}
 }
 
 export async function getCredits(): Promise<CreditListItem[]> {
-	const data = await httpRequest<any>("/credits")
+	const data = await httpRequest<unknown>("/credits")
 	if (!Array.isArray(data)) return []
 	return data.map(normalizeCreditListItem)
 }
 
 export async function getCreditById(id: number): Promise<CreditDetail> {
-	const data = await httpRequest<any>(`/credits/${id}`)
+	const data = await httpRequest<unknown>(`/credits/${id}`)
 	return normalizeCreditDetail(data)
 }
 

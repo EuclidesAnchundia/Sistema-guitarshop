@@ -19,7 +19,6 @@ import { api } from "../../lib/apiClient"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { ComprasListHeader } from "./components/ComprasListHeader"
 import { ComprasFiltersDrawer, type ComprasFiltersDraft } from "./components/ComprasFiltersDrawer"
-import { ComprasDetailDrawer } from "./components/ComprasDetailDrawer"
 
 import type { CompraDetailRecord, CompraListRecord, ProductoCompraItem } from "./compra.types"
 import { useComprasQuery } from "./useComprasQuery"
@@ -161,7 +160,10 @@ export default function ComprasPage() {
   const { isAdmin } = useAuthUser()
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<"create" | "edit">("create")
+  const [editId, setEditId] = useState<number | null>(null)
   const [detailId, setDetailId] = useState<number | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
   // Estado para funcionalidades avanzadas
@@ -236,9 +238,20 @@ export default function ComprasPage() {
     },
   })
 
+  const compraEditQuery = useQuery<CompraDetailRecord>({
+    queryKey: ["compra", "edit", editId],
+    enabled: editId !== null,
+    queryFn: async () => {
+      const { data } = await api.get<CompraDetailRecord>(`/compra/${editId}`)
+      return data
+    },
+  })
+
   // Limpia todo cuando cerramos el modal principal.
   const closeDialog = () => {
     setDialogOpen(false)
+    setDialogMode("create")
+    setEditId(null)
     setFormError(null)
     form.reset(defaultValues)
   }
@@ -246,6 +259,40 @@ export default function ComprasPage() {
   // Abre el modal en blanco para la creación.
   const openCreate = () => {
     setFormError(null)
+    setDialogMode("create")
+    setEditId(null)
+    form.reset(defaultValues)
+    setDialogOpen(true)
+  }
+
+  const resetFormFromCompra = (compra: CompraDetailRecord) => {
+    const detalle = Array.isArray(compra.producto_compra) && compra.producto_compra.length > 0
+      ? compra.producto_compra.map((item) => ({
+          id_producto: item.id_producto,
+          cantidad: item.cantidad_compra,
+          costo_unitario: item.costo_unitario,
+        }))
+      : defaultValues.detalle
+
+    form.reset({
+      id_proveedor: compra.proveedor?.id_proveedor ?? 0,
+      observacion: compra.observacion ?? "",
+      detalle,
+    })
+  }
+
+  const openEdit = (id: number, compra?: CompraDetailRecord | null) => {
+    setFormError(null)
+    setDialogMode("edit")
+    setEditId(id)
+
+    if (compra) {
+      resetFormFromCompra(compra)
+      setDialogOpen(true)
+      return
+    }
+
+    // Evita mostrar valores previos mientras llega el fetch.
     form.reset(defaultValues)
     setDialogOpen(true)
   }
@@ -273,10 +320,56 @@ export default function ComprasPage() {
     },
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: CompraPayload }) =>
+      api.put(`/compra/${id}`, payload).then((res) => res.data),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["compras"] })
+      queryClient.invalidateQueries({ queryKey: ["compra", variables.id] })
+      queryClient.invalidateQueries({ queryKey: ["compra", "edit", variables.id] })
+      closeDialog()
+    },
+    onError: (error: unknown) => {
+      setFormError(getApiErrorMessage(error, "No se pudo actualizar la compra"))
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/compra/${id}`).then(() => undefined),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["compras"] })
+      if (detailId !== null && detailId === id) {
+        setDetailId(null)
+      }
+      setDeleteId(null)
+      setFormError(null)
+    },
+    onError: (error: unknown) => {
+      // Mostramos el error en el mismo confirm.
+      setFormError(getApiErrorMessage(error, "No se pudo eliminar la compra"))
+    },
+  })
+
   // Handler compartido tanto para crear desde cero como para duplicar futuras compras.
   const onSubmit = form.handleSubmit((values) => {
+    if (dialogMode === "edit") {
+      if (editId === null) {
+        setFormError("No se encontró la compra a editar")
+        return
+      }
+      updateMutation.mutate({ id: editId, payload: buildPayload(values) })
+      return
+    }
     createMutation.mutate(buildPayload(values))
   })
+
+  useEffect(() => {
+    if (dialogMode !== "edit") return
+    if (!dialogOpen) return
+    if (!compraEditQuery.data) return
+    resetFormFromCompra(compraEditQuery.data)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogMode, dialogOpen, compraEditQuery.data])
 
 	// Funciones para filtros y navegación
 	const openFilters = () => {
@@ -460,6 +553,29 @@ export default function ComprasPage() {
         </button>
         {menu.open && (
           <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                openEdit(compra.id_compra)
+                menu.setOpen(false)
+              }}
+              className="flex w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Editar
+            </button>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                setFormError(null)
+                setDeleteId(compra.id_compra)
+                menu.setOpen(false)
+              }}
+              className="flex w-full px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50"
+            >
+              Eliminar
+            </button>
             <button
               type="button"
               onClick={(event) => {
@@ -720,51 +836,49 @@ export default function ComprasPage() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
-              <div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
+            <div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                  disabled={currentPage <= 1}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Anterior
-                </button>
-                <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
-                  {currentPage}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                  disabled={currentPage >= totalPages}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Siguiente
-                </button>
-              </div>
-
-              <div className="inline-flex items-center gap-3">
-                <label htmlFor="compras-page-size-bottom" className="text-sm font-semibold text-slate-800">
-                  Por página
-                </label>
-                <select
-                  id="compras-page-size-bottom"
-                  value={String(pageSize)}
-                  onChange={(event) => handleChangePageSize(Number(event.target.value) as PageSizeOption)}
-                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                >
-                  {PAGE_SIZE_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={currentPage <= 1}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Anterior
+              </button>
+              <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
+                {currentPage}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={currentPage >= totalPages}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Siguiente
+              </button>
             </div>
-          )}
+
+            <div className="inline-flex items-center gap-3">
+              <label htmlFor="compras-page-size-bottom" className="text-sm font-semibold text-slate-800">
+                Por página
+              </label>
+              <select
+                id="compras-page-size-bottom"
+                value={String(pageSize)}
+                onChange={(event) => handleChangePageSize(Number(event.target.value) as PageSizeOption)}
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              >
+                {PAGE_SIZE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {comprasQuery.isLoading && (
@@ -794,11 +908,25 @@ export default function ComprasPage() {
       </section>
 
       {dialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={closeDialog}>
-          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-8 sm:p-10" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => {
+            if (dialogMode === "create") closeDialog()
+          }}
+        >
+          <div
+            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-8 sm:p-10"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">Registrar compra</h2>
-              <p className="text-sm text-slate-600">Los movimientos actualizarán stock y kardex automáticamente.</p>
+              <h2 className="text-xl font-semibold text-slate-900">
+                {dialogMode === "edit" ? "Editar compra" : "Registrar compra"}
+              </h2>
+              <p className="text-sm text-slate-600">
+                {dialogMode === "edit"
+                  ? "Actualiza cabecera y productos asociados."
+                  : "Los movimientos actualizarán stock y kardex automáticamente."}
+              </p>
             </div>
 
           {formError && (
@@ -955,10 +1083,10 @@ Proveedor</label>
               <button
                 type="submit"
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || (dialogMode === "edit" && compraEditQuery.isLoading)}
               >
-                {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Registrar
+                {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                {dialogMode === "edit" ? "Guardar" : "Registrar"}
               </button>
             </div>
           </form>
@@ -969,9 +1097,18 @@ Proveedor</label>
       {detailId !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDetailId(null)}>
           <div className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">Detalle de compra</h2>
-              <p className="text-sm text-slate-600">Incluye cabecera y productos asociados.</p>
+            <div className="mb-6 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Detalle de compra</h2>
+                <p className="text-sm text-slate-600">Incluye cabecera y productos asociados.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailId(null)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
             </div>
 
           {compraDetalleQuery.isLoading && (
@@ -1049,8 +1186,75 @@ Proveedor</label>
                   <span>{currency.format(compraDetalleQuery.data.total)}</span>
                 </div>
               </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const compra = compraDetalleQuery.data
+                    openEdit(compra.id_compra, compra)
+                    setDetailId(null)
+                  }}
+                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormError(null)
+                    setDeleteId(compraDetalleQuery.data.id_compra)
+                  }}
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                >
+                  Eliminar
+                </button>
+              </div>
             </div>
           )}
+          </div>
+        </div>
+      )}
+
+      {deleteId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6">
+            <h3 className="text-lg font-semibold text-slate-900">Eliminar compra</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Esta acción no se puede deshacer. ¿Deseas eliminar la compra #{deleteId}?
+            </p>
+
+            {formError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {formError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteMutation.isPending) return
+                  setDeleteId(null)
+                  setFormError(null)
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  deleteMutation.mutate(deleteId)
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Eliminar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1072,15 +1276,6 @@ Proveedor</label>
 			onClearDraft={clearDraft}
       />
 
-      <ComprasDetailDrawer
-        open={detailId !== null}
-        compra={compraDetalleQuery.data ?? null}
-        dateFormatter={dateFormatter}
-        onEdit={() => {
-          // TODO: Implementar edición
-        }}
-        onClose={() => setDetailId(null)}
-      />
     </div>
   )
 }

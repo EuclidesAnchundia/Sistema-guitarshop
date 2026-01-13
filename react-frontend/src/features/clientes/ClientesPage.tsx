@@ -301,7 +301,7 @@ className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald
 aria-label="Nuevo cliente"
 >
 <Plus className="h-4 w-4" />
-+ Nuevo Cliente
+						Registrar cliente
 </button>
 </div>
 </div>

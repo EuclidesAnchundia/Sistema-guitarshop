@@ -25,7 +25,11 @@ type RequestOptions = {
 
 const baseUrl = import.meta.env.VITE_API_BASE_URL
 
-async function readJsonSafely(response: Response): Promise<any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return Boolean(value) && typeof value === "object"
+}
+
+async function readJsonSafely(response: Response): Promise<unknown> {
 	const text = await response.text()
 	if (!text) return null
 	try {
@@ -69,7 +73,7 @@ export async function httpRequest<T>(path: string, options: RequestOptions = {})
 
 	if (!response.ok) {
 		const msg =
-			(payload && typeof payload === "object" && (payload.error || payload.message))
+			(isRecord(payload) && (payload.error || payload.message))
 				? String(payload.error ?? payload.message)
 				: `Error HTTP ${response.status}`
 		throw new HttpError(msg, { status: response.status, payload })

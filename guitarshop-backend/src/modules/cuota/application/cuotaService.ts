@@ -203,7 +203,7 @@ export async function pagarCuotaCompleta(params: {
     const saldoActual = Number(credito.saldo_pendiente);
     const nuevoSaldo = Number((saldoActual - restante).toFixed(2));
 
-    const creditoActualizado = await tx.credito.update({
+    await tx.credito.update({
       where: { id_credito: credito.id_credito },
       data: {
         saldo_pendiente: nuevoSaldo <= 0 ? 0 : nuevoSaldo,
