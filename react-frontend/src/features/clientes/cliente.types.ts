@@ -19,8 +19,6 @@ export type ClientesFilters = {
 	orden: SortValue
 }
 
-export type ClientesViewMode = "table" | "cards"
-
 export type ClientePayload = {
 	nombres: string
 	apellidos: string
