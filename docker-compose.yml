@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: guitarshop
+      POSTGRES_DB: guitar_shop
       REPLICATION_USER: replicator
       REPLICATION_PASSWORD: replicatorpass
     ports:
@@ -14,7 +14,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./docker/db/01-primary-init.sh:/docker-entrypoint-initdb.d/01-primary-init.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d guitarshop"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d guitar_shop"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -49,13 +49,12 @@ services:
       sh -c "
       echo 'Starting backups every 6 hours to /backups ...';
       while true; do
-        pg_dump -h db -U postgres -d guitarshop > /backups/guitarshop_$(date +%Y%m%d_%H%M%S).sql;
+        pg_dump -h db -U postgres -d guitar_shop > /backups/guitar_shop_$(date +%Y%m%d_%H%M%S).sql;
         sleep 21600;
       done
       "
-    
 
-    db_archivo:
+  db_archivo:
     image: postgres:16-alpine
     container_name: guitarshop-db-archivo
     environment:
@@ -72,15 +71,16 @@ services:
       timeout: 3s
       retries: 20
 
-
   backend:
     build:
       context: ./guitarshop-backend
       dockerfile: Dockerfile
     container_name: guitarshop-backend
+    env_file:
+      - ./guitarshop-backend/.env
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/guitarshop
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/guitar_shop?schema=public
       PORT: "3000"
     ports:
       - "3000:3000"
@@ -97,6 +97,8 @@ services:
       context: ./react-frontend
       dockerfile: Dockerfile
     container_name: guitarshop-frontend
+    env_file:
+      - ./react-frontend/.env
     environment:
       VITE_BACKEND_URL: http://localhost:3000
     ports:
