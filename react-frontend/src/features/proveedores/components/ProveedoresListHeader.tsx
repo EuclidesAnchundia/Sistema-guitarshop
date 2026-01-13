@@ -31,8 +31,6 @@ type Props = {
 	onClearAllFilters: () => void
 }
 
-import { Search, SlidersHorizontal } from "lucide-react"
-
 export function ProveedoresListHeader(props: Props) {
 	return (
 		<div className="px-6 py-4">

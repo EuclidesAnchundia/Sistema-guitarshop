@@ -9,7 +9,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
 	AlertCircle,
 	Building2,
-	Eye,
+	Edit2,
 	Loader2,
 	Mail,
 	MapPin,
@@ -17,12 +17,14 @@ import {
 	Trash2,
 } from "lucide-react"
 
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../components/ui/dialog"
-import { api } from "../../lib/apiClient"
+import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
 import { detectEcuadorIdType, formatEcuadorIdTypeLabel, validateEcuadorId } from "./ecuadorId"
 
+import { exportToCSV, exportToPDF, exportToXLSX, type ExportRow } from "./exportProveedores"
+
 import type { ProveedoresFilters } from "./proveedor.types"
+import type { ProveedoresViewMode } from "./proveedor.types"
 import type { ProveedorPayload, ProveedorRecord } from "./proveedor.types"
 import { proveedorClient } from "./proveedor.client"
 import { matchesProveedorSearch } from "./proveedor.utils"
@@ -38,9 +40,13 @@ type ApiErrorResponse = {
 }
 
 const PAGE_SIZE_STORAGE_KEY = "proveedores.pageSize"
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 40] as const
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
 const DEFAULT_PAGE_SIZE: PageSizeOption = 25
+
+type ExportFormat = "csv" | "xlsx" | "pdf"
+type ExportScope = "page" | "filtered" | "all"
+type ExportStatus = "idle" | "exporting" | "done"
 
 const proveedorSchema = z.object({
 	nombre_proveedor: z.string().trim().min(3, "El nombre es obligatorio").max(100, "Máximo 100 caracteres"),
@@ -99,8 +105,9 @@ const defaultFilters: ProveedoresFilters = {
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
 	if (isAxiosError<ApiErrorResponse>(error)) {
-		return error.response?.data?.error ?? error.response?.data?.message ?? fallback
+		return error.response?.data?.error ?? error.response?.data?.message ?? error.message ?? fallback
 	}
+	if (error instanceof Error && error.message.trim()) return error.message
 	return fallback
 }
 
@@ -126,6 +133,14 @@ export default function ProveedoresPage() {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false)
 	const [editDialogOpen, setEditDialogOpen] = useState(false)
 	const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
+	const [exportDialogOpen, setExportDialogOpen] = useState(false)
+
+	const [viewMode, setViewMode] = useState<ProveedoresViewMode>("table")
+
+	const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx")
+	const [exportScope, setExportScope] = useState<ExportScope>("filtered")
+	const [exportStatus, setExportStatus] = useState<ExportStatus>("idle")
+	const [exportError, setExportError] = useState<string | null>(null)
 	const [selectedProveedor, setSelectedProveedor] = useState<ProveedorRecord | null>(null)
 	const [editingProveedor, setEditingProveedor] = useState<ProveedorRecord | null>(null)
 
@@ -180,9 +195,30 @@ export default function ProveedoresPage() {
 	}, [debouncedSearch, filters, pageSize])
 
 	const filteredProveedores = useMemo(() => {
-		if (!proveedoresQuery.data) return []
+		const normalizedSearch = debouncedSearch.trim()
+		const fromDate = filters.fechaDesde ? new Date(`${filters.fechaDesde}T00:00:00`) : null
+		const toDate = filters.fechaHasta ? new Date(`${filters.fechaHasta}T23:59:59.999`) : null
 
-		let result = proveedoresQuery.data.filter((proveedor) => matchesProveedorSearch(proveedor, debouncedSearch))
+		const result = proveedores
+			.filter((proveedor) => matchesProveedorSearch(proveedor, normalizedSearch))
+			.filter((proveedor) => {
+				if (filters.estado === "all") return true
+				const estado = proveedor.id_estado ?? 1
+				return filters.estado === "active" ? estado === 1 : estado !== 1
+			})
+			.filter((proveedor) => {
+				if (filters.tipoId === "all") return true
+				const type = detectEcuadorIdType(proveedor.ruc_cedula)
+				if (filters.tipoId === "cedula") return type === "cedula"
+				return type === "ruc_natural"
+			})
+			.filter((proveedor) => {
+				if (!fromDate && !toDate) return true
+				const regDate = new Date(proveedor.fecha_registro)
+				if (fromDate && regDate < fromDate) return false
+				if (toDate && regDate > toDate) return false
+				return true
+			})
 
 		// Aplicar ordenamiento
 		result.sort((a, b) => {
@@ -201,7 +237,7 @@ export default function ProveedoresPage() {
 		})
 
 		return result
-	}, [proveedoresQuery.data, debouncedSearch, filters, dateFilterRange])
+	}, [proveedores, debouncedSearch, filters])
 
 	const paginatedProveedores = useMemo(() => {
 		const start = (currentPage - 1) * pageSize
@@ -307,11 +343,8 @@ export default function ProveedoresPage() {
 		// all
 		if (proveedoresQuery.data) return proveedores
 		const fetched = await queryClient.fetchQuery({
-			queryKey: ["proveedores"],
-			queryFn: async () => {
-				const { data } = await api.get<ProveedorRecord[]>("/proveedor")
-				return Array.isArray(data) ? data : []
-			}
+			queryKey: proveedoresQueryKey,
+			queryFn: () => proveedorClient.list(),
 		})
 		return fetched ?? []
 	}
@@ -354,7 +387,7 @@ export default function ProveedoresPage() {
 			setExportStatus("done")
 			return true
 		} catch (error) {
-			setExportError("No se pudo exportar")
+			setExportError(getApiErrorMessage(error, "No se pudo exportar"))
 			setExportStatus("idle")
 			return false
 		}
@@ -422,6 +455,7 @@ export default function ProveedoresPage() {
 						setCurrentPage(1)
 					}}
 					onOpenCreate={() => setCreateDialogOpen(true)}
+					createDisabled={!isAdmin}
 					onOpenExport={() => setExportDialogOpen(true)}
 					filterChips={filterChips}
 					onRemoveChip={(key) => {
@@ -507,12 +541,14 @@ export default function ProveedoresPage() {
 												</button>
 												<button
 													onClick={() => handleOpenEdit(proveedor)}
+													disabled={!isAdmin}
 													className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
 												>
 													<Edit2 className="h-4 w-4" />
 												</button>
 												<button
 													onClick={() => handleDelete(proveedor)}
+													disabled={!isAdmin}
 													className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-sm font-medium text-red-600 shadow-sm transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red-950"
 												>
 													<Trash2 className="h-4 w-4" />
@@ -847,6 +883,92 @@ export default function ProveedoresPage() {
 								</button>
 							</div>
 						</form>
+					</div>
+				</div>
+			)}
+
+			{/* Export Dialog */}
+			{exportDialogOpen && (
+				<div
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+					onClick={() => {
+						setExportDialogOpen(false)
+						setExportStatus("idle")
+						setExportError(null)
+					}}
+				>
+					<div
+						className="w-full max-w-md rounded-2xl bg-white p-6"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="mb-4">
+							<h2 className="text-xl font-semibold text-slate-900">Exportar proveedores</h2>
+							<p className="text-sm text-slate-600">Elige el alcance y el formato del archivo.</p>
+						</div>
+
+						{exportError && (
+							<div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+								{exportError}
+							</div>
+						)}
+
+						<div className="space-y-4">
+							<div>
+								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Alcance</label>
+								<select
+									value={exportScope}
+									onChange={(e) => setExportScope(e.target.value as ExportScope)}
+									className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
+								>
+									<option value="page">Página actual</option>
+									<option value="filtered">Filtrado</option>
+									<option value="all">Todos</option>
+								</select>
+							</div>
+
+							<div>
+								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Formato</label>
+								<select
+									value={exportFormat}
+									onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+									className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm"
+								>
+									<option value="xlsx">Excel (.xlsx)</option>
+									<option value="csv">CSV (.csv)</option>
+									<option value="pdf">PDF (.pdf)</option>
+								</select>
+							</div>
+						</div>
+
+						<div className="mt-6 flex justify-end gap-3">
+							<button
+								type="button"
+								onClick={() => {
+									setExportDialogOpen(false)
+									setExportStatus("idle")
+									setExportError(null)
+								}}
+								className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								disabled={exportStatus === "exporting"}
+								onClick={async () => {
+									const ok = await runExport()
+									if (ok) {
+										setExportDialogOpen(false)
+										setExportStatus("idle")
+										setExportError(null)
+									}
+								}}
+								className="inline-flex items-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+							>
+								{exportStatus === "exporting" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+								Exportar
+							</button>
+						</div>
 					</div>
 				</div>
 			)}

@@ -16,6 +16,8 @@ export type SortValue =
 	| "date_asc"
 	| "date_desc"
 
+export type ProveedoresViewMode = "table" | "cards"
+
 export type ProveedorEstadoFilter = "all" | "active" | "inactive"
 export type ProveedorIdTypeFilter = "all" | "ruc" | "cedula"
 
