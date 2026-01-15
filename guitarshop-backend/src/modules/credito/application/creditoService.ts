@@ -1,5 +1,7 @@
 import prisma from "../../../shared/prisma/prismaClient";
 
+export * from "./creditsExport";
+
 // Siempre consultamos el crédito completo (factura + cuotas) para que el frontend pueda armar dashboards.
 const creditoSelect = {
   id_credito: true,

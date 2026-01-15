@@ -36,7 +36,20 @@ export async function GET(req: Request) {
 	if (!guard.ok) return guard.response;
 
 	try {
+		const url = new URL(req.url);
+		const productIdRaw = url.searchParams.get("productId") ?? url.searchParams.get("id_producto");
+		const limitRaw = url.searchParams.get("limit");
+
+		const productId = productIdRaw ? Number(productIdRaw) : null;
+		const take = limitRaw ? Number(limitRaw) : null;
+
+		const where = Number.isFinite(productId) && productId
+			? { id_producto: productId }
+			: undefined;
+		const normalizedTake = Number.isFinite(take) && take && take > 0 ? Math.min(500, take) : undefined;
+
 		const movimientos = await prisma.kardex.findMany({
+			where,
 			select: {
 				id_kardex: true,
 				id_producto: true,
@@ -56,6 +69,7 @@ export async function GET(req: Request) {
 				},
 			},
 			orderBy: { fecha_movimiento: "desc" },
+			take: normalizedTake,
 		});
 
 		return jsonCors(movimientos, { status: 200 });

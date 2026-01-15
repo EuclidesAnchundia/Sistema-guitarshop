@@ -1,4 +1,6 @@
 import { api } from "../../lib/apiClient"
+import { downloadBlob } from "../../shared/export/downloadBlob"
+import { filenameFromContentDisposition } from "../../shared/export/contentDisposition"
 import type {
 	ProductoPayload,
 	ProductoRecord,
@@ -172,5 +174,71 @@ export const productClient = {
 			cantidad: toNumberOr(asRecord(item).cantidad, 0),
 			costo_unitario: toNullableNumber(asRecord(item).costo_unitario),
 		}))
+	},
+
+	async listKardexForProduct(params: { productId: number; limit?: number | null }): Promise<KardexMovimientoRecord[]> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("productId", String(params.productId))
+		if (params.limit && params.limit > 0) searchParams.set("limit", String(params.limit))
+
+		const { data } = await api.get<KardexMovimientoRecord[]>(`/kardex?${searchParams.toString()}`)
+		if (!Array.isArray(data)) return []
+		return data.map((item) => ({
+			...item,
+			id_kardex: toNumberOr(asRecord(item).id_kardex, 0),
+			id_producto: toNumberOr(asRecord(item).id_producto, 0),
+			id_referencia: (() => {
+				const value = asRecord(item).id_referencia
+				if (value === null || value === undefined) return null
+				return toNumberOr(value, 0)
+			})(),
+			cantidad: toNumberOr(asRecord(item).cantidad, 0),
+			costo_unitario: toNullableNumber(asRecord(item).costo_unitario),
+		}))
+	},
+
+	async exportProducts(params: {
+		format: "pdf" | "xlsx" | "csv"
+		scope: "page" | "all"
+		ids?: number[]
+		page?: number
+		perPage?: number
+	}): Promise<void> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("format", params.format)
+		searchParams.set("scope", params.scope)
+		if (params.scope === "page") {
+			if (params.page) searchParams.set("page", String(params.page))
+			if (params.perPage) searchParams.set("perPage", String(params.perPage))
+			if (params.ids && params.ids.length > 0) {
+				searchParams.set("ids", params.ids.join(","))
+			}
+		}
+
+		const response = await api.get<Blob>(`/products/export?${searchParams.toString()}`, {
+			responseType: "blob",
+		})
+
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename =
+			filenameFromContentDisposition(cd) ??
+			(params.scope === "all" ? `productos_all.${params.format}` : `productos_page.${params.format}`)
+
+		downloadBlob(response.data, { filename })
+	},
+
+	async exportSingleProductPdf(params: { productId: number; limit?: number }): Promise<void> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("format", "pdf")
+		if (params.limit) searchParams.set("limit", String(params.limit))
+
+		const response = await api.get<Blob>(`/products/${params.productId}/export?${searchParams.toString()}`, {
+			responseType: "blob",
+		})
+
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename = filenameFromContentDisposition(cd) ?? `producto_${params.productId}.pdf`
+
+		downloadBlob(response.data, { filename })
 	},
 }

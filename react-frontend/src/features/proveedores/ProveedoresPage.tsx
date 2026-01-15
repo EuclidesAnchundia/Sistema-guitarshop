@@ -15,6 +15,7 @@ import {
 	Plus,
 	Trash2,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
@@ -125,6 +126,7 @@ export default function ProveedoresPage() {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false)
 	const [editDialogOpen, setEditDialogOpen] = useState(false)
 	const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
+	const [exportingKey, setExportingKey] = useState<string | null>(null)
 	const [selectedProveedor, setSelectedProveedor] = useState<ProveedorRecord | null>(null)
 	const [editingProveedor, setEditingProveedor] = useState<ProveedorRecord | null>(null)
 
@@ -157,6 +159,39 @@ export default function ProveedoresPage() {
 		mutationFn: (id: number) => proveedorClient.remove(id),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: proveedoresQueryKey })
+		},
+	})
+
+	const exportMutation = useMutation({
+		mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv"; ids?: number[] }) => {
+			const key = `${args.scope}-${args.format}`
+			setExportingKey(key)
+			try {
+				await proveedorClient.exportProveedores({
+					scope: args.scope,
+					format: args.format,
+					ids: args.scope === "page" ? args.ids : undefined,
+				})
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar proveedores. Intenta nuevamente.")
+		},
+	})
+
+	const exportSinglePdfMutation = useMutation({
+		mutationFn: async (proveedorId: number) => {
+			setExportingKey(`single-${proveedorId}`)
+			try {
+				await proveedorClient.exportSingleProveedorPdf(proveedorId)
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar el proveedor.")
 		},
 	})
 
@@ -418,6 +453,17 @@ export default function ProveedoresPage() {
 					searchInput={searchInput}
 					onSearchInputChange={setSearchInput}
 					onOpenFilters={() => setFiltersDrawerOpen(true)}
+					onExport={(args) => {
+						if (exportMutation.isPending) return
+						if (args.scope === "all") {
+							exportMutation.mutate({ scope: "all", format: args.format })
+							return
+						}
+
+						const ids = paginatedProveedores.map((p) => p.id_proveedor)
+						exportMutation.mutate({ scope: "page", format: args.format, ids })
+					}}
+					exportingKey={exportingKey}
 					filterChips={filterChips}
 					onRemoveChip={(key) => {
 						if (key === "orden") {
@@ -633,6 +679,12 @@ export default function ProveedoresPage() {
 						setDetailDrawerOpen(false)
 					}
 				}}
+				onExportPdf={() => {
+					if (!selectedProveedor) return
+					exportSinglePdfMutation.mutate(selectedProveedor.id_proveedor)
+				}}
+				exportingPdf={Boolean(selectedProveedor && exportingKey === `single-${selectedProveedor.id_proveedor}`)}
+				exportDisabled={exportingKey !== null}
 				onClose={() => setDetailDrawerOpen(false)}
 			/>
 

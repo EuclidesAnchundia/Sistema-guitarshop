@@ -1,4 +1,6 @@
 import { api } from "../../lib/apiClient"
+import { filenameFromContentDisposition } from "../../shared/export/contentDisposition"
+import { downloadBlob } from "../../shared/export/downloadBlob"
 import type { CompraDetailRecord, CompraListRecord, CompraPayload } from "./compra.types"
 
 export const compraClient = {
@@ -24,5 +26,34 @@ export const compraClient = {
 
 	async remove(id: number): Promise<void> {
 		await api.delete(`/compra/${id}`)
+	},
+
+	async exportCompras(params: { format: "pdf" | "xlsx" | "csv"; scope: "page" | "all"; ids?: number[] }): Promise<void> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("format", params.format)
+		searchParams.set("scope", params.scope)
+		if (params.scope === "page" && params.ids && params.ids.length > 0) {
+			searchParams.set("ids", params.ids.join(","))
+		}
+
+		const response = await api.get<Blob>(`/compra/export?${searchParams.toString()}`, {
+			responseType: "blob",
+		})
+
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename =
+			filenameFromContentDisposition(cd) ??
+			(params.scope === "all" ? `compras_all.${params.format}` : `compras_page.${params.format}`)
+
+		downloadBlob(response.data, { filename })
+	},
+
+	async exportSingleCompraPdf(compraId: number): Promise<void> {
+		const response = await api.get<Blob>(`/compra/${compraId}/export`, {
+			responseType: "blob",
+		})
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename = filenameFromContentDisposition(cd) ?? `compra_${compraId}.pdf`
+		downloadBlob(response.data, { filename })
 	},
 }

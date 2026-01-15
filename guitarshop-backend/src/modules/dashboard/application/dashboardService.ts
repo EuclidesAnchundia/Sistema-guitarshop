@@ -3,6 +3,8 @@ import { Prisma } from "../../../../generated/prisma/client";
 
 type DateRange = { start: Date; end: Date };
 
+export type DashboardExportRange = "current" | "7d" | "month";
+
 const toNumber = (value: unknown) => {
   if (value === null || value === undefined) return 0;
   return typeof value === "number" ? value : Number(value);
@@ -334,5 +336,200 @@ export async function obtenerDashboard() {
       stockCritico: lowStockProducts.length,
       cuotasVencidas: cuotasVencidasCount,
     },
+  };
+}
+
+type DashboardData = Awaited<ReturnType<typeof obtenerDashboard>>;
+
+export type DashboardExportBundle = {
+  range: DashboardExportRange;
+  generatedAt: Date;
+  rangeLabel: string;
+  primary: {
+    periodLabel: string;
+    periodStart: Date;
+    periodEnd: Date;
+    sales: {
+      amount: number;
+      orders: number;
+      avgTicket: number;
+      delta: number;
+    };
+    revenue: {
+      ingresos: number;
+      utilidad: number;
+      margen: number;
+      delta: number;
+    };
+  };
+  dashboard: DashboardData;
+  topProducts: DashboardData["topProducts"];
+  salesHistory: DashboardData["salesHistory"];
+};
+
+async function getCostSnapshot(range: DateRange) {
+  type CostRow = { total_costos: Prisma.Decimal | number | string };
+  const rows = await prisma.$queryRaw<CostRow[]>(Prisma.sql`
+    SELECT
+      COALESCE(SUM(df.cantidad * COALESCE(p.precio_compra, 0)), 0) AS total_costos
+    FROM detalle_factura df
+    INNER JOIN factura f ON f.id_factura = df.id_factura
+    INNER JOIN producto p ON p.id_producto = df.id_producto
+    WHERE f.fecha_factura >= ${range.start} AND f.fecha_factura < ${range.end}
+  `);
+  return toNumber(rows?.[0]?.total_costos);
+}
+
+function diffDays(start: Date, end: Date) {
+  const msDay = 1000 * 60 * 60 * 24;
+  return Math.max(0, Math.ceil((end.getTime() - start.getTime()) / msDay));
+}
+
+export async function obtenerDashboardExportBundle(range: DashboardExportRange): Promise<DashboardExportBundle> {
+  const generatedAt = new Date();
+  const dashboard = await obtenerDashboard();
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfTomorrow = buildDate(startOfToday, 1);
+
+  if (range === "current") {
+    return {
+      range,
+      generatedAt,
+      rangeLabel: "Vista actual",
+      primary: {
+        periodLabel: "Mes en curso",
+        periodStart: new Date(now.getFullYear(), now.getMonth(), 1),
+        periodEnd: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+        sales: dashboard.sales.month,
+        revenue: dashboard.revenue,
+      },
+      dashboard,
+      topProducts: dashboard.topProducts,
+      salesHistory: dashboard.salesHistory,
+    };
+  }
+
+  const startOfWeek = buildDate(startOfToday, -6);
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const periodStart = range === "7d" ? startOfWeek : startOfMonth;
+  const periodEnd = startOfTomorrow;
+  const prevPeriodEnd = periodStart;
+  const prevPeriodStart = buildDate(prevPeriodEnd, -diffDays(periodStart, periodEnd));
+
+  const [salesCurrent, salesPrev, costosCurrent, costosPrev] = await Promise.all([
+    getSalesSnapshot({ start: periodStart, end: periodEnd }),
+    getSalesSnapshot({ start: prevPeriodStart, end: prevPeriodEnd }),
+    getCostSnapshot({ start: periodStart, end: periodEnd }),
+    getCostSnapshot({ start: prevPeriodStart, end: prevPeriodEnd }),
+  ]);
+
+  const salesWithDelta = {
+    ...salesCurrent,
+    delta: percentChange(salesCurrent.amount, salesPrev.amount),
+  };
+
+  const ingresos = salesCurrent.amount;
+  const utilidad = ingresos - costosCurrent;
+  const margen = ingresos === 0 ? 0 : utilidad / ingresos;
+
+  const prevIngresos = salesPrev.amount;
+  const revenueDelta = percentChange(ingresos, prevIngresos);
+
+  const revenue = {
+    ingresos,
+    utilidad,
+    margen,
+    delta: revenueDelta,
+  };
+
+  const topProductsRaw = await prisma.detalle_factura.groupBy({
+    by: ["id_producto"],
+    _sum: { cantidad: true, subtotal: true },
+    where: {
+      factura: {
+        fecha_factura: { gte: periodStart, lt: periodEnd },
+      },
+    },
+    orderBy: { _sum: { cantidad: "desc" } },
+    take: 5,
+  });
+
+  const productIds = topProductsRaw.map((item) => item.id_producto);
+  const productMap = productIds.length
+    ? await prisma.producto.findMany({
+        where: { id_producto: { in: productIds } },
+        select: {
+          id_producto: true,
+          nombre_producto: true,
+          cantidad_stock: true,
+        },
+      })
+    : [];
+
+  const productLookup = new Map(productMap.map((producto) => [producto.id_producto, producto]));
+
+  const topProducts = topProductsRaw.map((item) => {
+    const meta = productLookup.get(item.id_producto);
+    return {
+      id_producto: item.id_producto,
+      nombre_producto: meta?.nombre_producto ?? "Producto sin nombre",
+      unidades_vendidas: item._sum.cantidad ?? 0,
+      ingresos: toNumber(item._sum.subtotal),
+      stock_actual: meta?.cantidad_stock ?? 0,
+    };
+  });
+
+  const desiredHistoryDays = range === "7d" ? 7 : Math.min(Math.max(now.getDate(), 1), 31);
+  const maxHistoryDays = range === "month" ? 20 : 7;
+  const historyDays = Math.min(desiredHistoryDays, maxHistoryDays);
+  const historyStart = diffDays(periodStart, periodEnd) <= historyDays ? periodStart : buildDate(startOfToday, -(historyDays - 1));
+
+  type SalesHistoryRow = {
+    day: Date;
+    total: Prisma.Decimal | number | string;
+  };
+
+  const salesHistoryRaw = await prisma.$queryRaw<SalesHistoryRow[]>(Prisma.sql`
+    SELECT
+      DATE(f.fecha_factura) AS day,
+      COALESCE(SUM(f.total), 0) AS total
+    FROM factura f
+    WHERE f.fecha_factura >= ${historyStart} AND f.fecha_factura < ${periodEnd}
+    GROUP BY DATE(f.fecha_factura)
+    ORDER BY day ASC
+  `);
+
+  const historyEntries = new Map<string, number>();
+  for (const row of salesHistoryRaw) {
+    const key = row.day.toISOString().slice(0, 10);
+    historyEntries.set(key, toNumber(row.total));
+  }
+
+  const salesHistory = Array.from({ length: historyDays }, (_, idx) => {
+    const day = buildDate(historyStart, idx);
+    const key = day.toISOString().slice(0, 10);
+    return {
+      date: day.toISOString(),
+      total: historyEntries.get(key) ?? 0,
+    };
+  });
+
+  return {
+    range,
+    generatedAt,
+    rangeLabel: range === "7d" ? "Últimos 7 días" : "Mes en curso",
+    primary: {
+      periodLabel: range === "7d" ? "Últimos 7 días" : "Mes en curso",
+      periodStart,
+      periodEnd,
+      sales: salesWithDelta,
+      revenue,
+    },
+    dashboard,
+    topProducts,
+    salesHistory,
   };
 }

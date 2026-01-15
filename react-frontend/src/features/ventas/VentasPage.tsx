@@ -78,6 +78,8 @@ export default function VentasPage() {
   const [detailFormError, setDetailFormError] = useState<string | null>(null)
   const [editObservacionDraft, setEditObservacionDraft] = useState("")
 
+	const [exportingKey, setExportingKey] = useState<string | null>(null)
+
   const closeEditDialog = () => {
     setEditId(null)
     setEditObservacionDraft("")
@@ -255,6 +257,39 @@ export default function VentasPage() {
     onError: (error: unknown) => {
       setDetailFormError(getApiErrorMessage(error, "No se pudo reactivar la venta"))
       toast.error("No se pudo reactivar")
+    },
+  })
+
+  const exportMutation = useMutation({
+    mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv"; ids?: number[] }) => {
+      const key = `${args.scope}-${args.format}`
+      setExportingKey(key)
+      try {
+        await salesService.exportSales({
+          scope: args.scope,
+          format: args.format,
+          ids: args.scope === "page" ? args.ids : undefined,
+        })
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar ventas. Intenta nuevamente.")
+    },
+  })
+
+  const exportSinglePdfMutation = useMutation({
+    mutationFn: async (ventaId: number) => {
+      setExportingKey(`single-${ventaId}`)
+      try {
+        await salesService.exportSingleSalePdf(ventaId)
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar la venta.")
     },
   })
 
@@ -453,6 +488,17 @@ export default function VentasPage() {
               setFiltersDraft(filters)
               setFiltersOpen(true)
             }}
+			onExport={(args) => {
+				if (exportMutation.isPending) return
+				if (args.scope === "all") {
+					exportMutation.mutate({ scope: "all", format: args.format })
+					return
+				}
+
+				const ids = pagedVentas.map((v) => v.id_factura)
+				exportMutation.mutate({ scope: "page", format: args.format, ids })
+			}}
+			exportingKey={exportingKey}
             filterChips={filterChips}
             onRemoveChip={(key) => {
               if (key === "estado") setFilters((prev) => ({ ...prev, estado: "all" }))
@@ -721,6 +767,12 @@ export default function VentasPage() {
         supportsReactivate={(ventaDetalleQuery.data?.forma_pago ?? "CONTADO") === "CONTADO"}
         busy={cancelVentaMutation.isPending || reactivateVentaMutation.isPending}
         errorMessage={detailFormError}
+    onExportPdf={() => {
+      const sale = ventaDetalleQuery.data
+      if (!sale) return
+      exportSinglePdfMutation.mutate(sale.id_factura)
+    }}
+    exportingPdf={Boolean(ventaDetalleQuery.data && exportingKey === `single-${ventaDetalleQuery.data.id_factura}`)}
       />
 
       <Dialog

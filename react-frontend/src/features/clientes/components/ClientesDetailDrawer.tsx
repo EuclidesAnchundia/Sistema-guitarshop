@@ -1,3 +1,5 @@
+import { Download } from "lucide-react"
+
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { ClienteRecord } from "../cliente.types"
 import { getClienteFullName } from "../cliente.utils"
@@ -11,6 +13,9 @@ type Props = {
 	dateFormatter: Intl.DateTimeFormat
 
 	onEdit: () => void
+	onExportPdf: () => void
+	exportingPdf?: boolean
+	exportDisabled?: boolean
 	onClose: () => void
 }
 
@@ -70,6 +75,14 @@ export function ClientesDetailDrawer(props: Props) {
 					</div>
 
 					<div className="flex justify-end gap-3">
+						<button
+							onClick={props.onExportPdf}
+							disabled={Boolean(props.exportDisabled || props.exportingPdf)}
+							className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
+						>
+							<Download className="h-4 w-4" aria-hidden="true" />
+							Exportar PDF
+						</button>
 						<button
 							onClick={props.onClose}
 							className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"

@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo } from "react"
-import { AlertCircle, ArrowDownRight, ArrowUpRight, CreditCard, Package, RefreshCcw, ShieldAlert, ShoppingBag, TrendingUp, Truck, Users, Wallet2 } from "lucide-react"
+import { useMemo, useRef, useState } from "react"
+import { AlertCircle, ArrowDownRight, ArrowUpRight, CreditCard, Package, ShieldAlert, ShoppingBag, TrendingUp, Truck, Users, Wallet2 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useDashboardData } from "../../lib/hooks/useDashboardData"
 import type { CreditStatus, LowStockProduct, SalesHistoryPoint, SalesMetric, TopProduct } from "../../lib/hooks/useDashboardData"
 import { cn } from "../../lib/utils"
+import DashboardExportButton from "./DashboardExportButton"
 
 const currencyFormatter = new Intl.NumberFormat("es-EC", { style: "currency", currency: "USD", maximumFractionDigits: 0 })
 const numberFormatter = new Intl.NumberFormat("es-EC", { maximumFractionDigits: 0 })
@@ -17,7 +18,7 @@ const formatPercent = (value: number) => `${percentFormatter.format(value)}%`
 const formatDateLabel = (iso: string) => dateFormatter.format(new Date(iso))
 
 export default function Dashboard() {
-  const { data, isLoading, isRefetching, refetch, error } = useDashboardData()
+  const { data, isLoading, refetch, error } = useDashboardData()
 
   const summaryStats = useMemo(() => {
     if (!data) return []
@@ -97,13 +98,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500">Todo el contexto clave en una sola vista.</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          <RefreshCcw className={cn("h-4 w-4", isRefetching && "animate-spin")} />
-          Actualizar
-        </button>
+        <DashboardExportButton />
       </header>
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-12">
@@ -299,6 +294,111 @@ type SalesPulseProps = {
   latestValue: number
 }
 
+type SalesPulseTrend = "up" | "down" | "neutral"
+
+const getSalesPulseTrend = (history: SalesHistoryPoint[]): SalesPulseTrend => {
+  if (history.length < 2) return "neutral"
+  const first = history[0]?.total ?? 0
+  const last = history[history.length - 1]?.total ?? 0
+  const delta = last - first
+
+  const totals = history.map((point) => point.total)
+  const maxAbs = Math.max(...totals.map((value) => Math.abs(value)), 0)
+  const threshold = Math.max(Math.abs(first) * 0.01, maxAbs * 0.005, 1)
+  if (Math.abs(delta) <= threshold) return "neutral"
+  return delta > 0 ? "up" : "down"
+}
+
+type SalesPulseSparklineProps = {
+  history: SalesHistoryPoint[]
+}
+
+const SalesPulseSparkline = ({ history }: SalesPulseSparklineProps) => {
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [tooltip, setTooltip] = useState<null | { x: number; y: number; date: string; total: number }>(null)
+
+  const trend = useMemo(() => getSalesPulseTrend(history), [history])
+  const toneClass = trend === "up" ? "text-emerald-500" : trend === "down" ? "text-rose-500" : "text-slate-400"
+
+  if (history.length === 0) return null
+
+  const VIEWBOX_W = 120
+  const VIEWBOX_H = 44
+  const PADDING = 6
+
+  const totals = history.map((point) => point.total)
+  const min = Math.min(...totals)
+  const max = Math.max(...totals)
+  const range = max - min || 1
+
+  const usableW = VIEWBOX_W - PADDING * 2
+  const usableH = VIEWBOX_H - PADDING * 2
+  const xStep = history.length > 1 ? usableW / (history.length - 1) : 0
+
+  const points = history.map((point, index) => {
+    const x = PADDING + index * xStep
+    const y = PADDING + (1 - (point.total - min) / range) * usableH
+    return { x, y, point }
+  })
+
+  const polylinePoints = points.map(({ x, y }) => `${x},${y}`).join(" ")
+  const lastIndex = history.length - 1
+
+  const showTooltip = (x: number, y: number, point: SalesHistoryPoint) => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const xPx = (x / VIEWBOX_W) * rect.width
+    const yPx = (y / VIEWBOX_H) * rect.height
+    setTooltip({ x: xPx, y: yPx, date: point.date, total: point.total })
+  }
+
+  return (
+    <div ref={containerRef} className="relative h-24 w-full">
+      <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className={cn("h-full w-full", toneClass)}>
+        <polyline
+          points={polylinePoints}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          opacity={0.95}
+        />
+
+        {points.map(({ x, y, point }, index) => {
+          const isLast = index === lastIndex
+          return (
+            <circle
+              key={point.date}
+              cx={x}
+              cy={y}
+              r={isLast ? 3.2 : 2.1}
+              fill="currentColor"
+              opacity={isLast ? 1 : 0.75}
+              className="cursor-default"
+              tabIndex={0}
+              onMouseEnter={() => showTooltip(x, y, point)}
+              onMouseLeave={() => setTooltip(null)}
+              onFocus={() => showTooltip(x, y, point)}
+              onBlur={() => setTooltip(null)}
+            />
+          )
+        })}
+      </svg>
+
+      {tooltip ? (
+        <div
+          className="pointer-events-none absolute z-10 rounded-md bg-slate-900 px-2 py-1 text-[11px] text-white shadow"
+          style={{ left: tooltip.x, top: tooltip.y, transform: "translate(-50%, -130%)" }}
+        >
+          <p className="font-semibold leading-none">{formatDateLabel(tooltip.date)}</p>
+          <p className="mt-0.5 leading-none opacity-90">{formatCurrency(tooltip.total)}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 const SalesPulse = ({ history, latestValue }: SalesPulseProps) => {
   if (history.length === 0) {
     return (
@@ -309,7 +409,6 @@ const SalesPulse = ({ history, latestValue }: SalesPulseProps) => {
   }
 
   const totals = history.map((point) => point.total)
-  const maxValue = Math.max(...totals, 1)
   const average = totals.reduce((acc, total) => acc + total, 0) / history.length
   const bestDay = history.reduce((prev, current) => (current.total > prev.total ? current : prev))
   const worstDay = history.reduce((prev, current) => (current.total < prev.total ? current : prev))
@@ -328,24 +427,8 @@ const SalesPulse = ({ history, latestValue }: SalesPulseProps) => {
           <p className="text-xs text-slate-500">Promedio {formatCurrency(average)}</p>
         </div>
       </div>
-      <div className="mt-3 flex h-24 items-end gap-1.5 border-t border-slate-100 pt-3">
-        {history.map((point) => {
-          const barHeight = Math.round((point.total / maxValue) * 100)
-          return (
-            <div key={point.date} className="flex-1">
-              <div className="group relative flex h-full flex-col items-center justify-end">
-                <div
-                  className="w-full rounded-t-lg bg-emerald-500 transition group-hover:bg-emerald-600"
-                  style={{ height: `${barHeight}%` }}
-                />
-                <span className="mt-1 text-[10px] text-slate-500">{formatDateLabel(point.date)}</span>
-                <span className="pointer-events-none absolute -top-6 hidden rounded bg-slate-900 px-2 py-0.5 text-[11px] text-white group-hover:block">
-                  {formatCurrency(point.total)}
-                </span>
-              </div>
-            </div>
-          )
-        })}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <SalesPulseSparkline history={history} />
       </div>
       <div className="mt-2 grid grid-cols-1 gap-2 border-t border-slate-100 pt-2 text-sm text-slate-500 sm:grid-cols-3">
         <div>

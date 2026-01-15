@@ -1,6 +1,8 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import { Prisma } from "../../../../generated/prisma/client";
 
+export * from "./proveedorExport";
+
 const proveedorSelect = {
   id_proveedor: true,
   nombre_proveedor: true,

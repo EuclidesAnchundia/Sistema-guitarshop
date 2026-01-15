@@ -1,5 +1,7 @@
 import prisma from "../../../shared/prisma/prismaClient";
 
+export * from "./compraExport";
+
 const compraSelectBase = {
   id_compra: true,
   fecha_compra: true,

@@ -9,11 +9,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertCircle,
   ClipboardList,
+  Download,
   Eye,
   Loader2,
   Plus,
   ShieldAlert,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { api } from "../../lib/apiClient"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
@@ -21,6 +23,7 @@ import { ComprasListHeader } from "./components/ComprasListHeader"
 import { ComprasFiltersDrawer, type ComprasFiltersDraft } from "./components/ComprasFiltersDrawer"
 
 import type { CompraDetailRecord, CompraListRecord, ProductoCompraItem } from "./compra.types"
+import { compraClient } from "./compra.client"
 import { useComprasQuery } from "./useComprasQuery"
 import { exportToCSV, exportToPDF, exportToXLSX, type ExportRow } from "./exportCompras"
 
@@ -165,6 +168,8 @@ export default function ComprasPage() {
   const [detailId, setDetailId] = useState<number | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+
+	const [exportingKey, setExportingKey] = useState<string | null>(null)
 
   // Estado para funcionalidades avanzadas
   const [searchInput, setSearchInput] = useState("")
@@ -347,6 +352,39 @@ export default function ComprasPage() {
     onError: (error: unknown) => {
       // Mostramos el error en el mismo confirm.
       setFormError(getApiErrorMessage(error, "No se pudo eliminar la compra"))
+    },
+  })
+
+  const exportMutation = useMutation({
+    mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv"; ids?: number[] }) => {
+      const key = `${args.scope}-${args.format}`
+      setExportingKey(key)
+      try {
+        await compraClient.exportCompras({
+          scope: args.scope,
+          format: args.format,
+          ids: args.scope === "page" ? args.ids : undefined,
+        })
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar compras. Intenta nuevamente.")
+    },
+  })
+
+  const exportSinglePdfMutation = useMutation({
+    mutationFn: async (compraId: number) => {
+      setExportingKey(`single-${compraId}`)
+      try {
+        await compraClient.exportSingleCompraPdf(compraId)
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar la compra.")
     },
   })
 
@@ -752,6 +790,17 @@ export default function ComprasPage() {
             setCurrentPage(1)
           }}
           onOpenFilters={openFilters}
+		  onExport={(args) => {
+			  if (exportMutation.isPending) return
+			  if (args.scope === "all") {
+				  exportMutation.mutate({ scope: "all", format: args.format })
+				  return
+			  }
+
+			  const ids = paginatedCompras.map((c) => c.id_compra)
+			  exportMutation.mutate({ scope: "page", format: args.format, ids })
+		  }}
+		  exportingKey={exportingKey}
           filterChips={filterChips}
           onRemoveChip={removeChip}
           onClearAllFilters={clearAllFilters}
@@ -910,9 +959,6 @@ export default function ComprasPage() {
       {dialogOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => {
-            if (dialogMode === "create") closeDialog()
-          }}
         >
           <div
             className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-8 sm:p-10"
@@ -1102,13 +1148,28 @@ Proveedor</label>
                 <h2 className="text-xl font-semibold text-slate-900">Detalle de compra</h2>
                 <p className="text-sm text-slate-600">Incluye cabecera y productos asociados.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailId(null)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-              >
-                Cerrar
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const compra = compraDetalleQuery.data
+                if (!compra) return
+                exportSinglePdfMutation.mutate(compra.id_compra)
+              }}
+              disabled={exportingKey !== null || exportSinglePdfMutation.isPending || !compraDetalleQuery.data}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Exportar PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => setDetailId(null)}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Cerrar
+            </button>
+          </div>
             </div>
 
           {compraDetalleQuery.isLoading && (

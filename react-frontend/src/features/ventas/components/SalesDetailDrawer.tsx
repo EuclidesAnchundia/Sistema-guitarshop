@@ -1,4 +1,4 @@
-import { CreditCard, Loader2, NotebookPen, XOctagon } from "lucide-react"
+import { CreditCard, Download, Loader2, NotebookPen, XOctagon } from "lucide-react"
 import { useState } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
@@ -24,6 +24,8 @@ type Props = {
 	supportsReactivate: boolean
 	busy?: boolean
 	errorMessage?: string | null
+	onExportPdf?: () => void
+	exportingPdf?: boolean
 }
 
 export function SalesDetailDrawer(props: Props) {
@@ -190,6 +192,17 @@ export function SalesDetailDrawer(props: Props) {
 
 								<div className="mt-2 flex flex-wrap items-center justify-end gap-2">
 									<button type="button" onClick={() => setAutoPrintEnabled(true)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Imprimir</button>
+									{props.onExportPdf && (
+										<button
+											type="button"
+											onClick={props.onExportPdf}
+											disabled={!sale || props.exportingPdf}
+											className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+										>
+											<Download className="h-4 w-4" aria-hidden="true" />
+											Exportar PDF
+										</button>
+									)}
 								</div>
 
 								{sale.credito && (
