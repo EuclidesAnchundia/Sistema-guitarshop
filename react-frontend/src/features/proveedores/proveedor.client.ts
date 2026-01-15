@@ -1,4 +1,6 @@
 import { api } from "../../lib/apiClient"
+import { filenameFromContentDisposition } from "../../shared/export/contentDisposition"
+import { downloadBlob } from "../../shared/export/downloadBlob"
 import type { ProveedorPayload, ProveedorRecord } from "./proveedor.types"
 
 export const proveedorClient = {
@@ -23,5 +25,34 @@ export const proveedorClient = {
 
 	async remove(proveedorId: number): Promise<void> {
 		await api.delete(`/proveedor/${proveedorId}`)
+	},
+
+	async exportProveedores(params: { format: "pdf" | "xlsx" | "csv"; scope: "page" | "all"; ids?: number[] }): Promise<void> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("format", params.format)
+		searchParams.set("scope", params.scope)
+		if (params.scope === "page" && params.ids && params.ids.length > 0) {
+			searchParams.set("ids", params.ids.join(","))
+		}
+
+		const response = await api.get<Blob>(`/proveedor/export?${searchParams.toString()}`, {
+			responseType: "blob",
+		})
+
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename =
+			filenameFromContentDisposition(cd) ??
+			(params.scope === "all" ? `proveedores_all.${params.format}` : `proveedores_page.${params.format}`)
+
+		downloadBlob(response.data, { filename })
+	},
+
+	async exportSingleProveedorPdf(proveedorId: number): Promise<void> {
+		const response = await api.get<Blob>(`/proveedor/${proveedorId}/export`, {
+			responseType: "blob",
+		})
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename = filenameFromContentDisposition(cd) ?? `proveedor_${proveedorId}.pdf`
+		downloadBlob(response.data, { filename })
 	},
 }

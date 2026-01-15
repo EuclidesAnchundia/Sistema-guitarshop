@@ -1,4 +1,4 @@
-import { Mail, MapPin, Phone } from "lucide-react"
+import { Download, Mail, MapPin, Phone } from "lucide-react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { ProveedorRecord } from "../proveedor.types"
@@ -12,6 +12,9 @@ type Props = {
 	dateFormatter: Intl.DateTimeFormat
 
 	onEdit: () => void
+	onExportPdf: () => void
+	exportingPdf?: boolean
+	exportDisabled?: boolean
 	onClose: () => void
 }
 
@@ -42,6 +45,15 @@ export function ProveedoresDetailDrawer(props: Props) {
 						</DrawerDescription>
 
 						<div className="mt-4 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={props.onExportPdf}
+								disabled={Boolean(props.exportDisabled || props.exportingPdf)}
+								className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<Download className="h-4 w-4" aria-hidden="true" />
+								Exportar PDF
+							</button>
 							<button
 								type="button"
 								onClick={props.onEdit}

@@ -19,6 +19,7 @@ import {
 	Trash2,
 	UploadCloud,
 } from "lucide-react"
+import { toast } from "sonner"
 import * as XLSX from "xlsx"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
@@ -1014,6 +1015,50 @@ export default function ProductsPage() {
 	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 	const [deleteTarget, setDeleteTarget] = useState<ProductoRecord | null>(null)
 
+	const [exportingKey, setExportingKey] = useState<string | null>(null)
+
+	const exportMutation = useMutation({
+		mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv" }) => {
+			const key = `${args.scope}-${args.format}`
+			setExportingKey(key)
+			try {
+				if (args.scope === "all") {
+					await productClient.exportProducts({ scope: "all", format: args.format })
+					return
+				}
+
+				// Página actual: snapshot EXACTO de lo visible (incluye filtros/búsqueda/orden/paginación del cliente).
+				const ids = displayedProducts.map((p) => p.id_producto)
+				await productClient.exportProducts({
+					scope: "page",
+					format: args.format,
+					ids,
+					page: currentPage,
+					perPage: pageSize,
+				})
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar. Intenta nuevamente.")
+		},
+	})
+
+	const exportSinglePdfMutation = useMutation({
+		mutationFn: async (productId: number) => {
+			setExportingKey(`single-${productId}`)
+			try {
+				await productClient.exportSingleProductPdf({ productId, limit: 50 })
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar el producto.")
+		},
+	})
+
 	const handleDelete = (producto: ProductoRecord) => {
 		if (deleteMutation.isPending) return
 		setDeleteTarget(producto)
@@ -1466,6 +1511,11 @@ export default function ProductsPage() {
 					searchInput={searchInput}
 					onSearchInputChange={setSearchInput}
 					onOpenFilters={openFilters}
+					onExport={(args) => {
+						if (exportMutation.isPending) return
+						exportMutation.mutate(args)
+					}}
+					exportingKey={exportingKey}
 					filterChips={filterChips}
 					onRemoveChip={removeChip}
 					onClearAllFilters={clearAllFilters}
@@ -2478,6 +2528,12 @@ export default function ProductsPage() {
 					navigate("/ventas")
 					closeDetail()
 				}}
+				onExportPdf={() => {
+					if (!detailProduct) return
+					if (exportSinglePdfMutation.isPending) return
+					exportSinglePdfMutation.mutate(detailProduct.id_producto)
+				}}
+				exportingPdf={Boolean(detailProduct && exportingKey === `single-${detailProduct.id_producto}`)}
 				onClose={closeDetail}
 			/>
 

@@ -7,6 +7,7 @@ import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { AlertCircle, Eye, Loader2, MoreHorizontal, Plus, Trash2, Users } from "lucide-react"
+import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
@@ -110,6 +111,8 @@ const [createDialogOpen, setCreateDialogOpen] = useState(false)
 const [editDialogOpen, setEditDialogOpen] = useState(false)
 const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
 
+	const [exportingKey, setExportingKey] = useState<string | null>(null)
+
 const [selectedCliente, setSelectedCliente] = useState<ClienteRecord | null>(null)
 const [editingCliente, setEditingCliente] = useState<ClienteRecord | null>(null)
 
@@ -146,6 +149,39 @@ setEditingCliente(null)
 editForm.reset(defaultValues)
 },
 })
+
+	const exportMutation = useMutation({
+		mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv"; ids?: number[] }) => {
+			const key = `${args.scope}-${args.format}`
+			setExportingKey(key)
+			try {
+				await clienteClient.exportClientes({
+					scope: args.scope,
+					format: args.format,
+					ids: args.scope === "page" ? args.ids : undefined,
+				})
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar clientes. Intenta nuevamente.")
+		},
+	})
+
+	const exportSinglePdfMutation = useMutation({
+		mutationFn: async (clienteId: number) => {
+			setExportingKey(`single-${clienteId}`)
+			try {
+				await clienteClient.exportSingleClientePdf(clienteId)
+			} finally {
+				setExportingKey(null)
+			}
+		},
+		onError: () => {
+			toast.error("No se pudo exportar el cliente.")
+		},
+	})
 
 const deleteMutation = useMutation({
 mutationFn: (id: number) => clienteClient.remove(id),
@@ -355,6 +391,18 @@ resultsCount={filteredClientes.length}
 searchInput={searchInput}
 onSearchInputChange={setSearchInput}
 onOpenFilters={() => setFiltersDrawerOpen(true)}
+	onExport={(args) => {
+		if (exportMutation.isPending) return
+		if (args.scope === "all") {
+			exportMutation.mutate({ scope: "all", format: args.format })
+			return
+		}
+
+		// Página actual: snapshot EXACTO de lo visible (incluye búsqueda/orden/paginación del cliente).
+		const ids = paginatedClientes.map((c) => c.id_cliente)
+		exportMutation.mutate({ scope: "page", format: args.format, ids })
+	}}
+	exportingKey={exportingKey}
 filterChips={filterChips}
 onRemoveChip={(key) => {
 if (key === "orden") setFilters((prev) => ({ ...prev, orden: defaultFilters.orden }))
@@ -548,6 +596,12 @@ handleOpenEdit(selectedCliente)
 setDetailDrawerOpen(false)
 }
 }}
+	onExportPdf={() => {
+		if (!selectedCliente) return
+		exportSinglePdfMutation.mutate(selectedCliente.id_cliente)
+	}}
+	exportingPdf={Boolean(selectedCliente && exportingKey === `single-${selectedCliente.id_cliente}`)}
+	exportDisabled={exportingKey !== null}
 onClose={() => setDetailDrawerOpen(false)}
 />
 

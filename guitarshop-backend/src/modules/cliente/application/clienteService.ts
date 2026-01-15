@@ -1,6 +1,8 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import { Prisma } from "../../../../generated/prisma/client";
 
+export * from "./clienteExport";
+
 const clienteSelect = {
   id_cliente: true,
   nombres: true,

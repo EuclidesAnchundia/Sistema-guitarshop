@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { AlertCircle, CalendarClock, Clock, CreditCard, DollarSign, Eye, Loader2, PiggyBank, ShieldAlert } from "lucide-react"
+import { AlertCircle, CalendarClock, Clock, CreditCard, DollarSign, Download, Eye, Loader2, PiggyBank, ShieldAlert } from "lucide-react"
+import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
@@ -88,6 +89,7 @@ export default function CreditosPage() {
   const [filters, setFilters] = useState<CreditsFilters>(defaultFilters)
   const [filtersDraft, setFiltersDraft] = useState<CreditsFilters>(defaultFilters)
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false)
+  const [exportingKey, setExportingKey] = useState<string | null>(null)
 
   // Esta consulta trae el tablero completo y sólo corre si el usuario es admin.
   const creditosQuery = useQuery<CreditListItem[]>({
@@ -229,6 +231,42 @@ export default function CreditosPage() {
     },
   })
 
+  const exportMutation = useMutation({
+    mutationFn: async (args: { scope: "page" | "all"; format: "pdf" | "xlsx" | "csv" }) => {
+      const key = `${args.scope}-${args.format}`
+      setExportingKey(key)
+      try {
+        if (args.scope === "all") {
+          await creditsApi.exportCredits({ scope: "all", format: args.format })
+          return
+        }
+
+        // Página actual: snapshot EXACTO de lo visible (incluye filtros/búsqueda/orden del cliente).
+        const ids = filteredCreditos.map((c) => c.id)
+        await creditsApi.exportCredits({ scope: "page", format: args.format, ids })
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar. Intenta nuevamente.")
+    },
+  })
+
+  const exportSinglePdfMutation = useMutation({
+    mutationFn: async (creditId: number) => {
+      setExportingKey(`single-${creditId}`)
+      try {
+        await creditsApi.exportSingleCreditPdf(creditId)
+      } finally {
+        setExportingKey(null)
+      }
+    },
+    onError: () => {
+      toast.error("No se pudo exportar el crédito.")
+    },
+  })
+
   // Enviamos el formulario sólo si hay cuota seleccionada; el resto es UX.
   const onPagoSubmit = pagoForm.handleSubmit((values) => {
     if (!selectedInstallment) return
@@ -351,6 +389,8 @@ export default function CreditosPage() {
               resultsCount={filteredCreditos.length}
               searchInput={searchInput}
               onSearchInputChange={setSearchInput}
+              onExport={(args) => exportMutation.mutate(args)}
+              exportingKey={exportingKey}
               filterChips={filterChips}
               onRemoveChip={(key) => {
                 if (key === "status") setFilters((prev) => ({ ...prev, status: "all" }))
@@ -554,12 +594,26 @@ export default function CreditosPage() {
           {creditoDetalleQuery.data && (
             <div className="space-y-6">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-base font-semibold text-slate-900">
-                  {creditoDetalleQuery.data.saleCode || `Crédito #${creditoDetalleQuery.data.id}`}
-                </p>
-                <p className="text-sm text-slate-500">
-                  Cliente: {`${creditoDetalleQuery.data.cliente.nombres} ${creditoDetalleQuery.data.cliente.apellidos}`}
-                </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-slate-900">
+                      {creditoDetalleQuery.data.saleCode || `Crédito #${creditoDetalleQuery.data.id}`}
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Cliente: {`${creditoDetalleQuery.data.cliente.nombres} ${creditoDetalleQuery.data.cliente.apellidos}`}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => exportSinglePdfMutation.mutate(creditoDetalleQuery.data.id)}
+                    disabled={exportingKey !== null || exportSinglePdfMutation.isPending}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                  >
+                    <Download className="h-4 w-4" aria-hidden="true" />
+                    Exportar PDF
+                  </button>
+                </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-white/70 bg-white p-3 text-sm text-slate-600">
                     <p className="text-xs uppercase text-slate-500">Monto total</p>

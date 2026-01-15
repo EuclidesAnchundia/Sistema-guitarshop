@@ -1,5 +1,8 @@
 import { httpRequest } from "./httpClient"
 import { toNumberSafe } from "../utils/number"
+import { api } from "../lib/apiClient"
+import { filenameFromContentDisposition } from "../shared/export/contentDisposition"
+import { downloadBlob } from "../shared/export/downloadBlob"
 
 export type CreditStatus = "ACTIVO" | "EN_MORA" | "CANCELADO"
 export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA"
@@ -157,4 +160,33 @@ export const creditsApi = {
 	// Compat: nombres antiguos usados por algunas pantallas
 	list: getCredits,
 	getById: getCreditById,
+
+	async exportCredits(params: { format: "pdf" | "xlsx" | "csv"; scope: "page" | "all"; ids?: number[] }): Promise<void> {
+		const searchParams = new URLSearchParams()
+		searchParams.set("format", params.format)
+		searchParams.set("scope", params.scope)
+		if (params.scope === "page" && params.ids && params.ids.length > 0) {
+			searchParams.set("ids", params.ids.join(","))
+		}
+
+		const response = await api.get<Blob>(`/credits/export?${searchParams.toString()}`, {
+			responseType: "blob",
+		})
+
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename =
+			filenameFromContentDisposition(cd) ??
+			(params.scope === "all" ? `creditos_all.${params.format}` : `creditos_page.${params.format}`)
+
+		downloadBlob(response.data, { filename })
+	},
+
+	async exportSingleCreditPdf(creditId: number): Promise<void> {
+		const response = await api.get<Blob>(`/credits/${creditId}/export`, {
+			responseType: "blob",
+		})
+		const cd = (response.headers?.["content-disposition"] as string | undefined) ?? undefined
+		const filename = filenameFromContentDisposition(cd) ?? `credito_${creditId}.pdf`
+		downloadBlob(response.data, { filename })
+	},
 }
