@@ -297,6 +297,17 @@ export default function VentasPage() {
   const clientes = useMemo(() => clientesQuery.data ?? [], [clientesQuery.data])
   const productos = useMemo(() => productosQuery.data ?? [], [productosQuery.data])
 
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<{ id: number; numero: string } | null>(null)
+
+  const cancelValidationQuery = useQuery<{ canCancel: boolean; reason?: string; message?: string }>({
+    queryKey: ["ventas", "can-cancel", cancelTarget?.id],
+    enabled: cancelConfirmOpen && cancelTarget !== null,
+    queryFn: async () => {
+      return await salesService.canCancelSale((cancelTarget as { id: number }).id)
+    },
+  })
+
   // KPIs rápidos para pintar las tarjetas del dashboard.
   const totalFacturado = useMemo(() => round2(ventas.reduce((acc, venta) => acc + toNumberSafe(venta.total), 0)), [ventas])
 
@@ -351,11 +362,20 @@ export default function VentasPage() {
   const startItem = filteredVentas.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
   const endItem = filteredVentas.length === 0 ? 0 : Math.min(filteredVentas.length, (currentPage - 1) * pageSize + pagedVentas.length)
 
+  const openCancelDialog = (id: number, numero: string) => {
+    setCancelTarget({ id, numero })
+    setCancelConfirmOpen(true)
+  }
+
+  const closeCancelDialog = () => {
+    if (cancelVentaMutation.isPending) return
+    setCancelConfirmOpen(false)
+    setCancelTarget(null)
+  }
+
   const handleCancelVenta = () => {
-    if (!ventaDetalleQuery.data || cancelVentaMutation.isPending) return
-    const confirmed = window.confirm("¿Seguro que deseas anular esta venta? Esta acción no se puede revertir.")
-    if (!confirmed) return
-    cancelVentaMutation.mutate(ventaDetalleQuery.data.id_factura)
+    if (!ventaDetalleQuery.data) return
+    openCancelDialog(ventaDetalleQuery.data.id_factura, ventaDetalleQuery.data.numero_factura)
   }
 
   const handleReactivateVenta = () => {
@@ -632,11 +652,7 @@ export default function VentasPage() {
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   if (cancelVentaMutation.isPending) return
-                                  const confirmed = window.confirm(
-                                    "¿Seguro que deseas anular esta venta? Esta acción no se puede revertir."
-                                  )
-                                  if (!confirmed) return
-                                  cancelVentaMutation.mutate(venta.id_factura)
+                                  openCancelDialog(venta.id_factura, venta.numero_factura)
                                 }}
                                 disabled={cancelVentaMutation.isPending}
                                 className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -714,6 +730,80 @@ export default function VentasPage() {
             </div>
           </div>
       </div>
+
+      {cancelConfirmOpen && cancelTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Anular venta"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-900">Anular venta</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Se intentará anular la factura <span className="font-semibold text-slate-900">{cancelTarget.numero}</span>. Esta acción
+              no se puede revertir.
+            </p>
+
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              {cancelValidationQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Validando si se puede anular...
+                </div>
+              ) : cancelValidationQuery.isError ? (
+                <p className="text-sm font-medium text-red-700">
+                  No se pudo validar si se puede anular. Intenta nuevamente.
+                </p>
+              ) : cancelValidationQuery.data?.canCancel ? (
+                <p className="text-sm font-semibold text-emerald-700">Se puede anular esta venta.</p>
+              ) : (
+                <p className="text-sm font-semibold text-red-700">
+                  No se puede anular.
+                  <span className="ml-1 font-medium text-red-700">
+                    {cancelValidationQuery.data?.message ?? ""}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCancelDialog}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                disabled={cancelVentaMutation.isPending}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!cancelTarget || cancelVentaMutation.isPending) return
+                  const validation = cancelValidationQuery.data
+                  if (!validation || !validation.canCancel) return
+                  cancelVentaMutation.mutate(cancelTarget.id, {
+                    onSuccess: () => {
+                      setCancelConfirmOpen(false)
+                      setCancelTarget(null)
+                    },
+                  })
+                }}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={
+                  cancelVentaMutation.isPending ||
+                  cancelValidationQuery.isLoading ||
+                  cancelValidationQuery.isError ||
+                  !cancelValidationQuery.data?.canCancel
+                }
+              >
+                {cancelVentaMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Aceptar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         <SalesFiltersDrawer
           open={filtersOpen}

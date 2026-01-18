@@ -1,7 +1,4 @@
-import jsPDF from "jspdf"
-import "jspdf-autotable"
-import autoTable, { type UserOptions } from "jspdf-autotable"
-import * as XLSX from "xlsx"
+// Librerías pesadas cargadas dinámicamente
 
 export type ExportRow = {
 	"ID Compra": string
@@ -13,7 +10,7 @@ export type ExportRow = {
 
 export function exportToCSV(rows: ExportRow[], baseName: string) {
 	const csvContent = [
-		Object.keys(rows[0]).join(","),
+		Object.keys(rows[0] || {}).join(","),
 		...rows.map(row => Object.values(row).map(value => `"${value}"`).join(","))
 	].join("\n")
 
@@ -24,14 +21,20 @@ export function exportToCSV(rows: ExportRow[], baseName: string) {
 	link.click()
 }
 
-export function exportToXLSX(rows: ExportRow[], baseName: string) {
+export async function exportToXLSX(rows: ExportRow[], baseName: string) {
+	const XLSX = await import("xlsx")
 	const worksheet = XLSX.utils.json_to_sheet(rows)
 	const workbook = XLSX.utils.book_new()
 	XLSX.utils.book_append_sheet(workbook, worksheet, "Compras")
 	XLSX.writeFile(workbook, `${baseName}.xlsx`)
 }
 
-export function exportToPDF(rows: ExportRow[], baseName: string) {
+export async function exportToPDF(rows: ExportRow[], baseName: string) {
+	const [{ default: jsPDF }, autoTableMod] = await Promise.all([
+		import("jspdf"),
+		import("jspdf-autotable").catch(() => null),
+	])
+
 	const doc = new jsPDF()
 
 	doc.setFontSize(16)
@@ -40,7 +43,7 @@ export function exportToPDF(rows: ExportRow[], baseName: string) {
 	const tableColumns = ["ID Compra", "Proveedor", "Fecha Compra", "Total", "Fecha Registro"]
 	const tableRows = rows.map(row => Object.values(row))
 
-	const options: UserOptions = {
+	const options: Record<string, unknown> = {
 		head: [tableColumns],
 		body: tableRows,
 		startY: 30,
@@ -48,7 +51,8 @@ export function exportToPDF(rows: ExportRow[], baseName: string) {
 		headStyles: { fillColor: [41, 128, 185] },
 	}
 
-	autoTable(doc, options)
+	const autoTable = autoTableMod?.default as unknown as ((doc: unknown, opts: Record<string, unknown>) => void) | undefined
+	if (autoTable) autoTable(doc, options)
 
 	doc.save(`${baseName}.pdf`)
 }

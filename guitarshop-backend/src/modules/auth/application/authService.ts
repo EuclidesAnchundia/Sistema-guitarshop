@@ -22,12 +22,21 @@ export async function loginUsuario(email: string, password: string) {
     where: { correo: email },
   });
 
-  // Si no existe o está inactivo
-  if (!user || user.id_estado !== estadoActivo.id_estado) return null;
+  // Si no existe
+  if (!user) return { error: "Usuario no encontrado" };
+
+  // Si está inactivo por estado
+  if (user.id_estado !== estadoActivo.id_estado) return { error: "Usuario inactivo" };
+
+  // Si está inactivo por campo activo
+  if (!user.activo) return { error: "Usuario desactivado" };
+
+  // Si está bloqueado
+  if (user.bloqueado) return { error: "Usuario bloqueado, contacte al administrador" };
 
   // Compara contraseña enviada con el password_hash de la BD
   const passwordOk = await bcrypt.compare(password, user.password_hash);
-  if (!passwordOk) return null;
+  if (!passwordOk) return { error: "Credenciales inválidas" };
 
   // Payload del token (ojo: la propiedad se llama "id" porque
   // tu verifyToken la lee así)
@@ -49,6 +58,8 @@ export async function loginUsuario(email: string, password: string) {
       nombre_completo: user.nombre_completo,
       correo: user.correo,
       rol: user.rol,
+      activo: user.activo,
+      bloqueado: user.bloqueado,
     },
   };
 }

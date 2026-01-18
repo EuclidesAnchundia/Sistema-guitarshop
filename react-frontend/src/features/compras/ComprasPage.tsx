@@ -9,7 +9,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertCircle,
   ClipboardList,
-  Download,
   Eye,
   Loader2,
   Plus,
@@ -21,11 +20,12 @@ import { api } from "../../lib/apiClient"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { ComprasListHeader } from "./components/ComprasListHeader"
 import { ComprasFiltersDrawer, type ComprasFiltersDraft } from "./components/ComprasFiltersDrawer"
+import { ComprasDetailDrawer } from "./components/ComprasDetailDrawer"
 
-import type { CompraDetailRecord, CompraListRecord, ProductoCompraItem } from "./compra.types"
+import type { CompraDetailRecord, CompraListRecord } from "./compra.types"
 import { compraClient } from "./compra.client"
 import { useComprasQuery } from "./useComprasQuery"
-import { exportToCSV, exportToPDF, exportToXLSX, type ExportRow } from "./exportCompras"
+// removed unused ExportRow import
 
 type ProveedorOption = {
   id_proveedor: number
@@ -201,6 +201,7 @@ export default function ComprasPage() {
   const form = useForm<CompraFormValues>({
     resolver: zodResolver(compraSchema),
     defaultValues,
+    mode: "onChange",
   })
 
   // Permite añadir/quitar filas dinámicamente y mantener los índices sincronizados.
@@ -284,6 +285,7 @@ export default function ComprasPage() {
       observacion: compra.observacion ?? "",
       detalle,
     })
+  	void form.trigger()
   }
 
   const openEdit = (id: number, compra?: CompraDetailRecord | null) => {
@@ -563,18 +565,10 @@ export default function ComprasPage() {
   const noProductosDisponibles = !productosQuery.isLoading && productos.length === 0
   const disableCreate = proveedoresNoDisponibles || productosNoDisponibles || noProveedoresDisponibles || noProductosDisponibles
 
-  const toExportRow = (compra: CompraListRecord): ExportRow => ({
-    "ID Compra": String(compra.id_compra),
-    "Proveedor": compra.proveedor?.nombre_proveedor ?? "—",
-    "Fecha Compra": dateFormatter.format(new Date(compra.fecha_compra)),
-    "Total": currency.format(compra.total ?? 0),
-    "Fecha Registro": "—",
-  })
+  
 
   const CompraActionsMenu = ({ compra }: { compra: CompraListRecord }) => {
     const menu = useFloatingMenu()
-    const baseName = `compra_${compra.id_compra}`
-    const rows = [toExportRow(compra)]
     return (
       <div ref={menu.ref} className="relative">
         <button
@@ -613,39 +607,6 @@ export default function ComprasPage() {
               className="flex w-full px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50"
             >
               Eliminar
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                exportToCSV(rows, baseName)
-                menu.setOpen(false)
-              }}
-              className="flex w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Exportar CSV
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                exportToXLSX(rows, baseName)
-                menu.setOpen(false)
-              }}
-              className="flex w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Exportar Excel
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                exportToPDF(rows, baseName)
-                menu.setOpen(false)
-              }}
-              className="flex w-full px-4 py-3 text-left text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Exportar PDF
             </button>
           </div>
         )}
@@ -1129,7 +1090,7 @@ Proveedor</label>
               <button
                 type="submit"
                 className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                disabled={createMutation.isPending || updateMutation.isPending || (dialogMode === "edit" && compraEditQuery.isLoading)}
+                disabled={!form.formState.isValid || createMutation.isPending || updateMutation.isPending || (dialogMode === "edit" && compraEditQuery.isLoading)}
               >
                 {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
                 {dialogMode === "edit" ? "Guardar" : "Registrar"}
@@ -1141,140 +1102,38 @@ Proveedor</label>
       )}
 
       {detailId !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDetailId(null)}>
-          <div className="w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-6 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900">Detalle de compra</h2>
-                <p className="text-sm text-slate-600">Incluye cabecera y productos asociados.</p>
-              </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                const compra = compraDetalleQuery.data
-                if (!compra) return
-                exportSinglePdfMutation.mutate(compra.id_compra)
-              }}
-              disabled={exportingKey !== null || exportSinglePdfMutation.isPending || !compraDetalleQuery.data}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Exportar PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => setDetailId(null)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Cerrar
-            </button>
-          </div>
-            </div>
-
-          {compraDetalleQuery.isLoading && (
-            <div className="flex items-center gap-2 text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Cargando detalle...
-            </div>
-          )}
-
-          {compraDetalleQuery.isError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              No se pudo cargar el detalle. Intenta nuevamente.
-            </div>
-          )}
-
-          {compraDetalleQuery.data && (
-            <div className="space-y-5">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <p className="text-sm font-semibold text-slate-900">
-                  Compra #{compraDetalleQuery.data.id_compra}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {dateFormatter.format(new Date(compraDetalleQuery.data.fecha_compra))}
-                </p>
-                <p className="mt-2 text-sm text-slate-700">
-                  Proveedor: {compraDetalleQuery.data.proveedor?.nombre_proveedor ?? "—"}
-                </p>
-                <p className="text-sm text-slate-700">
-                  Registrada por: {compraDetalleQuery.data.usuario?.nombre_completo ?? "—"}
-                </p>
-                {compraDetalleQuery.data.observacion && (
-                  <p className="text-sm text-slate-500">{compraDetalleQuery.data.observacion}</p>
-                )}
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-white">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Producto</th>
-                        <th className="px-4 py-3 text-left">Cantidad</th>
-                        <th className="px-4 py-3 text-left">Costo unitario</th>
-                        <th className="px-4 py-3 text-left">Subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {compraDetalleQuery.data.producto_compra.map((item: ProductoCompraItem) => (
-                        <tr key={item.id_producto_compra}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-slate-900">{item.producto.nombre_producto}</p>
-                            <p className="text-xs text-slate-500">{item.producto.codigo_producto}</p>
-                          </td>
-                          <td className="px-4 py-3 text-slate-700">{item.cantidad_compra}</td>
-                          <td className="px-4 py-3 text-slate-700">{currency.format(item.costo_unitario)}</td>
-                          <td className="px-4 py-3 text-slate-900 font-semibold">{currency.format(item.subtotal)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <div className="flex items-center justify-between">
-                  <span>Subtotal</span>
-                  <span>{currency.format(compraDetalleQuery.data.subtotal)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>IVA (15 %)</span>
-                  <span>{currency.format(compraDetalleQuery.data.impuesto)}</span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-base font-semibold text-slate-900">
-                  <span>Total</span>
-                  <span>{currency.format(compraDetalleQuery.data.total)}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const compra = compraDetalleQuery.data
-                    openEdit(compra.id_compra, compra)
-                    setDetailId(null)
-                  }}
-                  className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormError(null)
-                    setDeleteId(compraDetalleQuery.data.id_compra)
-                  }}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                >
-                  Eliminar
-                </button>
-              </div>
-            </div>
-          )}
-          </div>
-        </div>
+        <ComprasDetailDrawer
+          open={detailId !== null}
+          onOpenChange={(open) => {
+            if (!open) setDetailId(null)
+          }}
+          compra={compraDetalleQuery.data ?? null}
+          isLoading={compraDetalleQuery.isLoading}
+          isError={compraDetalleQuery.isError}
+          dateFormatter={dateFormatter}
+          currency={currency}
+          busy={exportingKey !== null || exportSinglePdfMutation.isPending}
+          onExportPdf={() => {
+            const compra = compraDetalleQuery.data
+            if (!compra) return
+            exportSinglePdfMutation.mutate(compra.id_compra)
+          }}
+          exportingPdf={exportSinglePdfMutation.isPending}
+          onEdit={() => {
+            const compra = compraDetalleQuery.data
+            if (!compra) return
+            openEdit(compra.id_compra, compra)
+            setDetailId(null)
+          }}
+          onDelete={() => {
+            const compra = compraDetalleQuery.data
+            if (!compra) return
+            setFormError(null)
+            setDetailId(null)
+            setDeleteId(compra.id_compra)
+          }}
+          onClose={() => setDetailId(null)}
+        />
       )}
 
       {deleteId !== null && (

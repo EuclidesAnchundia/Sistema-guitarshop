@@ -12,7 +12,10 @@ const usuarioSelect = {
   direccion: true,
   cedula: true,
   rol: true,
-  fecha_creacion: true, // 
+  fecha_nacimiento: true,
+  activo: true,
+  bloqueado: true,
+  fecha_creacion: true,
   id_estado: true,
 } as const;
 
@@ -20,12 +23,16 @@ const usuarioSelect = {
 // LISTAR USUARIOS
 // ==========================
 export async function obtenerUsuarios() {
+  // Solo usuarios activos y no bloqueados
   const usuarios = await prisma.usuario.findMany({
-    where: { id_estado: 1 }, // solo activos (puedes quitar este filtro si quieres ver todos)
+    where: {
+      id_estado: 1,
+      activo: true,
+      bloqueado: false,
+    },
     select: usuarioSelect,
     orderBy: { id_usuario: "asc" },
   });
-
   return usuarios;
 }
 
@@ -52,6 +59,9 @@ export async function crearUsuario(data: {
   cedula?: string | null;
   rol?: string;
   password: string;
+  fecha_nacimiento?: Date | string | null;
+  activo?: boolean;
+  bloqueado?: boolean;
   id_usuario_modifi?: number | null;
 }) {
   const password_hash = await hashPassword(data.password);
@@ -67,11 +77,23 @@ export async function crearUsuario(data: {
         cedula: data.cedula ?? null,
         rol: data.rol ?? "VENDEDOR",
         password_hash,
+        fecha_nacimiento: data.fecha_nacimiento ?? null,
+        activo: data.activo ?? true,
+        bloqueado: data.bloqueado ?? false,
         // fecha_creacion se pone sola por default
         id_estado: estadoActivo.id_estado,
         id_usuario_modifi: data.id_usuario_modifi ?? null,
       },
       select: usuarioSelect,
+    });
+
+    // Auditoría de creación
+    await prisma.usuario_auditoria.create({
+      data: {
+        id_usuario: usuario.id_usuario,
+        evento: "CREACION",
+        descripcion: `Usuario creado por ${data.id_usuario_modifi ?? "sistema"}`,
+      },
     });
 
     return usuario;
@@ -100,10 +122,13 @@ export async function actualizarUsuario(
     cedula?: string | null;
     rol?: string;
     password?: string;
+    fecha_nacimiento?: Date | string | null;
+    activo?: boolean;
+    bloqueado?: boolean;
     id_usuario_modifi?: number | null;
   }
 ) {
-    const updateData: Prisma.usuarioUncheckedUpdateInput = {};
+  const updateData: Prisma.usuarioUncheckedUpdateInput = {};
 
   if (data.nombre_completo !== undefined)
     updateData.nombre_completo = data.nombre_completo;
@@ -112,6 +137,9 @@ export async function actualizarUsuario(
   if (data.direccion !== undefined) updateData.direccion = data.direccion;
   if (data.cedula !== undefined) updateData.cedula = data.cedula;
   if (data.rol !== undefined) updateData.rol = data.rol;
+  if (data.fecha_nacimiento !== undefined) updateData.fecha_nacimiento = data.fecha_nacimiento;
+  if (data.activo !== undefined) updateData.activo = data.activo;
+  if (data.bloqueado !== undefined) updateData.bloqueado = data.bloqueado;
   if (data.id_usuario_modifi !== undefined)
     updateData.id_usuario_modifi = data.id_usuario_modifi;
 
@@ -124,6 +152,15 @@ export async function actualizarUsuario(
       where: { id_usuario: id },
       data: updateData,
       select: usuarioSelect,
+    });
+
+    // Auditoría de actualización
+    await prisma.usuario_auditoria.create({
+      data: {
+        id_usuario: usuario.id_usuario,
+        evento: "ACTUALIZACION",
+        descripcion: `Usuario actualizado por ${data.id_usuario_modifi ?? "sistema"}`,
+      },
     });
 
     return usuario;
@@ -145,6 +182,15 @@ export async function eliminarUsuario(id: number) {
   const usuario = await prisma.usuario.delete({
     where: { id_usuario: id },
     select: usuarioSelect,
+  });
+
+  // Auditoría de eliminación
+  await prisma.usuario_auditoria.create({
+    data: {
+      id_usuario: usuario.id_usuario,
+      evento: "ELIMINACION",
+      descripcion: `Usuario eliminado`,
+    },
   });
 
   return usuario;

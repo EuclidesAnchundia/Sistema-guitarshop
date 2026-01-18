@@ -7,6 +7,59 @@ import { downloadBlob } from "../shared/export/downloadBlob"
 export type CreditStatus = "ACTIVO" | "EN_MORA" | "CANCELADO"
 export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA"
 
+export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA" | "TARJETA"
+
+export type InstallmentUiStatus = "PENDIENTE" | "PARCIAL" | "PAGADO" | "VENCIDO"
+
+export type CreditInstallmentDetail = {
+	id: number
+	numero: number
+	fechaVencimiento: string
+	montoOriginal: number
+	montoPagado: number
+	saldoPendiente: number
+	estado: InstallmentUiStatus
+	dias: number
+	parcial: boolean
+	rawStatus?: string
+	paidAt: string | null
+}
+
+export type CreditMovementType = "PAGO" | "AJUSTE" | "CONDONACION" | "REPROGRAMACION" | string
+
+export type CreditMovement = {
+	id: number
+	creditoId: number
+	cuotaId: number
+	fecha: string
+	tipo: CreditMovementType
+	monto: number
+	metodo: string
+	referencia: string | null
+	nota: string | null
+	usuario: {
+		id: number
+		nombre: string
+		rol: string
+	}
+}
+
+export type CreditDetailResponse = {
+	credito: {
+		id: number
+		saleId: number
+		saleCode: string
+		cliente: ClienteMini
+		total: number
+		saldoPendiente: number
+		status: CreditStatus
+		fechaInicio?: string
+		fechaFin?: string | null
+	}
+	installments: CreditInstallmentDetail[]
+	movimientos: CreditMovement[]
+}
+
 export type ClienteMini = {
 	id_cliente: number
 	nombres: string
@@ -151,11 +204,40 @@ export async function payInstallment(installmentId: number, payload?: { amount?:
 	})
 }
 
+export async function getCreditDetalle(creditId: number): Promise<CreditDetailResponse> {
+	return httpRequest<CreditDetailResponse>(`/creditos/${creditId}/detalle`)
+}
+
+export async function createCuotaPago(params: {
+	creditoId: number
+	cuotaId: number
+	monto: number
+	fecha: string
+	metodo: PaymentMethod
+	referencia?: string
+	nota?: string
+	pagarTodoCredito?: boolean
+}): Promise<unknown> {
+	return httpRequest(`/creditos/${params.creditoId}/cuotas/${params.cuotaId}/pagos`, {
+		method: "POST",
+		body: {
+			monto: params.monto,
+			fecha: params.fecha,
+			metodo: params.metodo,
+			referencia: params.referencia,
+			nota: params.nota,
+			pagarTodoCredito: params.pagarTodoCredito,
+		},
+	})
+}
+
 export const creditsApi = {
 	// Nombres solicitados
 	getCredits,
 	getCreditById,
 	payInstallment,
+	getCreditDetalle,
+	createCuotaPago,
 
 	// Compat: nombres antiguos usados por algunas pantallas
 	list: getCredits,

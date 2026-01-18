@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { jsonCors, optionsCors, applyCorsHeaders } from "../../../../lib/cors";
+import { optionsCors, applyCorsHeaders } from "../../../../lib/cors";
 import { hasAdminRole, verifyToken } from "../../../../lib/auth";
 import { exportProveedoresFile } from "../../../../lib/services/proveedorService";
 

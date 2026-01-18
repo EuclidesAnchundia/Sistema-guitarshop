@@ -114,7 +114,7 @@ export async function exportSingleClientePdf(clienteId: number): Promise<{ buffe
       { label: "Teléfono", value: cliente.telefono ?? "—" },
       { label: "Dirección", value: cliente.direccion ?? "—" },
       { label: "Estado", value: cliente.id_estado === 1 ? "ACTIVO" : `ID=${cliente.id_estado}` },
-      { label: "Registro", value: cliente.fecha_registro?.toISOString?.() ?? cliente.fecha_registro },
+      { label: "Registro", value: cliente.fecha_registro },
     ],
   });
 

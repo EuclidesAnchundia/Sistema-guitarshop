@@ -91,6 +91,12 @@ function mapLegacyErrorCode(
 		// Cuotas
 		case "CREDITO_NO_ENCONTRADO":
 			return { status: 404, code: message, message: "Crédito no encontrado" };
+		case "CREDITO_CANCELADO":
+			return {
+				status: 400,
+				code: message,
+				message: "El crédito está cancelado y no admite pagos",
+			};
 		case "CUOTA_NO_ENCONTRADA":
 			return { status: 404, code: message, message: "Cuota no encontrada" };
 		case "CUOTA_YA_PAGADA":
@@ -108,6 +114,16 @@ function mapLegacyErrorCode(
 				status: 400,
 				code: message,
 				message: "El monto supera el saldo pendiente de la cuota",
+			};
+		case "FECHA_INVALIDA":
+			return { status: 400, code: message, message: "La fecha es inválida" };
+		case "METODO_PAGO_INVALIDO":
+			return { status: 400, code: message, message: "El método de pago es inválido" };
+		case "REFERENCIA_REQUERIDA":
+			return {
+				status: 400,
+				code: message,
+				message: "La referencia es requerida para transferencias",
 			};
 
 		default:

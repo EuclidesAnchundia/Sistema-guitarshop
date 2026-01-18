@@ -329,7 +329,7 @@ export async function crearVenta(data: {
         fecha_vencimiento: Date;
         monto_cuota: number;
         monto_pagado: number;
-        estado_cuota: string;
+        estado_cuota: Prisma.cuotaCreateManyInput["estado_cuota"];
         id_usuario_modifi: number | null;
       }> = [];
 
@@ -514,4 +514,54 @@ export async function anularVenta(
   });
 
   return resultado;
+}
+
+// ==========================
+// VALIDAR ANULACIÓN VENTA (sin efectos)
+// ==========================
+export async function validarAnulacionVenta(id: number) {
+  const estadoAnulado = await prisma.estado_registro.findFirst({
+    where: { nombre_estado: "ANULADO" },
+    select: { id_estado: true },
+  });
+
+  if (!estadoAnulado) {
+    return {
+      canCancel: false,
+      reason: "ESTADO_ANULADO_NO_CONFIGURADO",
+    } as const;
+  }
+
+  const factura = await prisma.factura.findUnique({
+    where: { id_factura: id },
+    select: {
+      id_factura: true,
+      id_estado: true,
+      forma_pago: true,
+      credito: {
+        select: {
+          id_credito: true,
+          cuota: { select: { monto_pagado: true } },
+        },
+      },
+    },
+  });
+
+  if (!factura) {
+    return { canCancel: false, reason: "VENTA_NO_ENCONTRADA" } as const;
+  }
+
+  if (factura.id_estado === estadoAnulado.id_estado) {
+    return { canCancel: false, reason: "VENTA_YA_ANULADA" } as const;
+  }
+
+  const cuotasPagadas = factura.credito.some((c) => c.cuota.some((q) => Number(q.monto_pagado) > 0));
+  if (cuotasPagadas) {
+    return {
+      canCancel: false,
+      reason: "CREDITO_CON_PAGOS",
+    } as const;
+  }
+
+  return { canCancel: true } as const;
 }

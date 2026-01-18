@@ -62,8 +62,85 @@ ALTER TABLE ONLY public._prisma_migrations
 
 
 --
--- PostgreSQL database dump complete
---
 
 \unrestrict SanFmzcIza73Dt0ie5wxweUeiuAl6TLBeZYUdYVjKiAzpaJkdrQxcXaequoL0P2
+
+-- =============================
+-- ESTRUCTURA PROFESIONAL GUITARSHOP
+-- =============================
+
+-- Tabla de clientes
+CREATE TABLE IF NOT EXISTS public.cliente (
+    id_cliente SERIAL PRIMARY KEY,
+    nombres VARCHAR(60) NOT NULL,
+    apellidos VARCHAR(60) NOT NULL,
+    cedula VARCHAR(10) UNIQUE NOT NULL,
+    correo VARCHAR(120),
+    telefono VARCHAR(20),
+    direccion VARCHAR(150),
+    fecha_nacimiento DATE,
+    fecha_registro TIMESTAMP(6) DEFAULT now(),
+    id_estado INT DEFAULT 1,
+    id_usuario_modifi INT,
+    CONSTRAINT fk_cliente_estado FOREIGN KEY (id_estado) REFERENCES estado_registro(id_estado),
+    CONSTRAINT fk_cliente_usuario_modifi FOREIGN KEY (id_usuario_modifi) REFERENCES usuario(id_usuario)
+);
+
+-- Tabla de usuarios
+CREATE TABLE IF NOT EXISTS public.usuario (
+    id_usuario SERIAL PRIMARY KEY,
+    nombre_completo VARCHAR(100) NOT NULL,
+    correo VARCHAR(120) UNIQUE NOT NULL,
+    telefono VARCHAR(20),
+    direccion VARCHAR(150),
+    cedula VARCHAR(10) UNIQUE,
+    fecha_nacimiento DATE,
+    rol VARCHAR(30) DEFAULT 'VENDEDOR',
+    password_hash VARCHAR(255) NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    fecha_creacion TIMESTAMP(6) DEFAULT now(),
+    last_login TIMESTAMP(6),
+    intentos_fallidos INT DEFAULT 0,
+    bloqueado BOOLEAN DEFAULT false,
+    id_estado INT DEFAULT 1,
+    id_usuario_modifi INT,
+    CONSTRAINT fk_usuario_estado FOREIGN KEY (id_estado) REFERENCES estado_registro(id_estado),
+    CONSTRAINT fk_usuario_usuario_modifi FOREIGN KEY (id_usuario_modifi) REFERENCES usuario(id_usuario)
+);
+CREATE INDEX IF NOT EXISTS ix_usuario_correo ON usuario(correo);
+CREATE INDEX IF NOT EXISTS ix_usuario_rol ON usuario(rol);
+CREATE INDEX IF NOT EXISTS ix_usuario_activo ON usuario(activo);
+CREATE INDEX IF NOT EXISTS ix_usuario_bloqueado ON usuario(bloqueado);
+
+-- Tabla de auditoría de usuario
+CREATE TABLE IF NOT EXISTS public.usuario_auditoria (
+    id_auditoria SERIAL PRIMARY KEY,
+    id_usuario INT NOT NULL,
+    evento VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(255),
+    fecha_evento TIMESTAMP(6) DEFAULT now(),
+    CONSTRAINT fk_auditoria_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS ix_auditoria_usuario ON usuario_auditoria(id_usuario);
+CREATE INDEX IF NOT EXISTS ix_auditoria_evento ON usuario_auditoria(evento);
+
+-- Estado de registro (mínimo)
+CREATE TABLE IF NOT EXISTS public.estado_registro (
+    id_estado SERIAL PRIMARY KEY,
+    nombre_estado VARCHAR(30) UNIQUE NOT NULL,
+    descripcion VARCHAR(100)
+);
+INSERT INTO public.estado_registro (nombre_estado, descripcion) VALUES ('ACTIVO', 'Registro activo') ON CONFLICT DO NOTHING;
+
+-- Usuario admin inicial (password: admin123, cambiar después de primer login)
+INSERT INTO public.usuario (nombre_completo, correo, password_hash, rol, activo)
+VALUES ('Administrador', 'admin@guitarshop.com', '$2b$10$7QJ8Qw1Qw1Qw1Qw1Qw1QwOQw1Qw1Qw1Qw1Qw1Qw1Qw1Qw1Qw1Qw1', 'ADMIN', true)
+ON CONFLICT (correo) DO NOTHING;
+
+-- Comentarios y preparación para escalabilidad:
+-- * Puedes agregar más roles en la tabla usuario (rol VARCHAR(30)).
+-- * Para permisos granulares, crea una tabla rol_permiso y usuario_rol.
+-- * Para logs generales, crea una tabla log_evento.
+-- * Para integración de pasarela de pago, crea una tabla pago_externo y un endpoint webhook.
+-- * Todos los campos de auditoría y relaciones están preparados para crecimiento.
 

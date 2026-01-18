@@ -1,13 +1,9 @@
 import prisma from "../../../shared/prisma/prismaClient";
-import { Prisma } from "../../../../generated/prisma/client";
-import ExcelJS from "exceljs";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
-import {
-  listarProductos,
-  listarProductosPaginado,
-  type ListarProductosPaginadoParams,
-} from "./productoService";
+import { exportTableToCsv, exportTableToPdf, exportTableToXlsx, type TableColumn } from "../../../shared/export/tableExport";
+
+import { listarProductosPaginado, type ListarProductosPaginadoParams } from "./productoService";
 
 export type ProductExportFormat = "csv" | "xlsx" | "pdf";
 export type ProductExportScope = "page" | "all";
@@ -44,13 +40,6 @@ const toNumberOrNull = (value: unknown): number | null => {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-};
-
-const escapeCsv = (value: unknown): string => {
-  const raw = value === null || value === undefined ? "" : String(value);
-  const needsQuotes = /[\r\n,\"]/g.test(raw);
-  const escaped = raw.replace(/\"/g, '""');
-  return needsQuotes ? `"${escaped}"` : escaped;
 };
 
 const inferCategoryFromCode = (code: string): string | null => {
@@ -103,75 +92,22 @@ const ensureSpace = (ctx: PdfCtx, needed: number) => {
 };
 
 async function buildProductsPdf(rows: ExportRow[], scope: ProductExportScope): Promise<Buffer> {
-  const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-
-  let ctx: PdfCtx = newPage({ pdf, font, bold });
-
-  const now = new Date();
   const title = scope === "all" ? "Productos (Todos)" : "Productos (Página actual)";
-  drawText(ctx, title, PDF_MARGIN, ctx.y, 18, true);
-  ctx.y -= 24;
-  drawText(ctx, `Generado: ${now.toLocaleString("es-EC")}`, PDF_MARGIN, ctx.y, 10, false, rgb(0.4, 0.4, 0.4));
-  ctx.y -= 18;
+  const columns: TableColumn<ExportRow>[] = [
+    { header: "Código", widthWeight: 1.0, value: (r) => r.codigo_producto },
+    { header: "Categoría", widthWeight: 0.8, value: (r) => inferCategoryFromCode(r.codigo_producto) ?? "" },
+    { header: "Producto", widthWeight: 2.2, value: (r) => r.nombre_producto },
+    { header: "Proveedor", widthWeight: 1.6, value: (r) => r.proveedor },
+    { header: "Precio venta", align: "right", widthWeight: 1.0, value: (r) => r.precio_venta },
+    { header: "Stock", align: "right", widthWeight: 0.7, value: (r) => r.stock },
+  ];
 
-  const col = {
-    codigo: { x: PDF_MARGIN, w: 90 },
-    nombre: { x: PDF_MARGIN + 92, w: 190 },
-    proveedor: { x: PDF_MARGIN + 92 + 192, w: 150 },
-    stock: { x: A4.width - PDF_MARGIN - 60, w: 60 },
-  };
-
-  const drawHeader = () => {
-    ensureSpace(ctx, 22);
-    drawText(ctx, "Código", col.codigo.x, ctx.y, 10, true);
-    drawText(ctx, "Producto", col.nombre.x, ctx.y, 10, true);
-    drawText(ctx, "Proveedor", col.proveedor.x, ctx.y, 10, true);
-    const stockLabel = "Stock";
-    const w = bold.widthOfTextAtSize(stockLabel, 10);
-    drawText(ctx, stockLabel, col.stock.x + col.stock.w - w, ctx.y, 10, true);
-    ctx.y -= 14;
-    // línea
-    ctx.page.drawLine({
-      start: { x: PDF_MARGIN, y: ctx.y },
-      end: { x: A4.width - PDF_MARGIN, y: ctx.y },
-      thickness: 1,
-      color: rgb(0.89, 0.91, 0.94),
-    });
-    ctx.y -= 10;
-  };
-
-  drawHeader();
-
-  const rowSize = 9;
-  const rowHeight = 14;
-
-  for (const r of rows) {
-    ensureSpace(ctx, rowHeight + 6);
-    const y = ctx.y;
-
-    const codigo = truncateToWidth(font, rowSize, r.codigo_producto, col.codigo.w);
-    const nombre = truncateToWidth(font, rowSize, r.nombre_producto, col.nombre.w);
-    const proveedor = truncateToWidth(font, rowSize, r.proveedor, col.proveedor.w);
-    const stock = String(r.stock ?? 0);
-
-    drawText(ctx, codigo, col.codigo.x, y, rowSize);
-    drawText(ctx, nombre, col.nombre.x, y, rowSize);
-    drawText(ctx, proveedor, col.proveedor.x, y, rowSize);
-
-    const stockW = font.widthOfTextAtSize(stock, rowSize);
-    drawText(ctx, stock, col.stock.x + col.stock.w - stockW, y, rowSize);
-
-    ctx.y -= rowHeight;
-    if (ctx.y < PDF_MARGIN + 40) {
-      ctx = newPage({ pdf, font, bold });
-      drawHeader();
-    }
-  }
-
-  const bytes = await pdf.save();
-  return Buffer.from(bytes);
+  return exportTableToPdf({
+    title,
+    subtitle: `Registros: ${rows.length} · Generado: ${new Date().toLocaleString("es-EC")}`,
+    rows,
+    columns,
+  });
 }
 
 async function buildSingleProductPdfDoc(params: {
@@ -211,7 +147,8 @@ async function buildSingleProductPdfDoc(params: {
   ];
 
   const labelW = 120;
-  const valueX = PDF_MARGIN + 140;
+  const gap = 20;
+  const valueX = PDF_MARGIN + labelW + gap;
   for (const [label, value] of rows) {
     ensureSpace(ctx, 14);
     drawText(ctx, `${label}:`, PDF_MARGIN, ctx.y, 10, true);
@@ -290,7 +227,21 @@ async function buildSingleProductPdfDoc(params: {
   return Buffer.from(bytes);
 }
 
-function buildExportRowsFromItems(items: any[]): ExportRow[] {
+type ProductoExportItem = {
+  id_producto: number;
+  codigo_producto: unknown;
+  nombre_producto: unknown;
+  proveedor?: { nombre_proveedor: unknown } | null;
+  proveedor_nombre?: unknown;
+  precio_venta?: unknown;
+  precio_compra?: unknown;
+  costo?: unknown;
+  margen?: unknown;
+  cantidad_stock?: unknown;
+  stock_minimo?: unknown;
+};
+
+function buildExportRowsFromItems(items: ProductoExportItem[]): ExportRow[] {
   return items.map((p) => {
     const precioVenta = toNumberOrNull(p.precio_venta) ?? 0;
     const compraRaw = toNumberOrNull(p.costo) ?? toNumberOrNull(p.precio_compra);
@@ -299,15 +250,12 @@ function buildExportRowsFromItems(items: any[]): ExportRow[] {
     const margenRaw = toNumberOrNull(p.margen);
     const margen = margenRaw !== null ? margenRaw : precioCompra === null ? null : precioVenta - precioCompra;
 
-    const proveedorNombre =
-      (p.proveedor_nombre as string | null | undefined) ??
-      (p.proveedor?.nombre_proveedor as string | null | undefined) ??
-      null;
+    const proveedorNombre = (p.proveedor_nombre ?? p.proveedor?.nombre_proveedor ?? null) as unknown;
 
     return {
       codigo_producto: String(p.codigo_producto ?? ""),
       nombre_producto: String(p.nombre_producto ?? ""),
-      proveedor: proveedorNombre ?? "Sin proveedor",
+      proveedor: proveedorNombre ? String(proveedorNombre) : "Sin proveedor",
       precio_venta: precioVenta,
       precio_compra: precioCompra,
       margen,
@@ -340,7 +288,7 @@ async function resolveProductsForExport(query: ProductExportQuery): Promise<{ ro
       orderBy: { id_producto: "asc" },
     });
 
-    return { rows: buildExportRowsFromItems(productos as any[]), scope: "all" };
+    return { rows: buildExportRowsFromItems(productos as unknown as ProductoExportItem[]), scope: "all" };
   }
 
   // scope=page
@@ -363,9 +311,11 @@ async function resolveProductsForExport(query: ProductExportQuery): Promise<{ ro
       },
     });
 
-    const byId = new Map<number, any>(productos.map((p) => [p.id_producto, p]));
+    const byId = new Map<number, ProductoExportItem>(
+      (productos as unknown as ProductoExportItem[]).map((p) => [p.id_producto, p])
+    );
     const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
-    return { rows: buildExportRowsFromItems(ordered), scope: "page" };
+    return { rows: buildExportRowsFromItems(ordered as ProductoExportItem[]), scope: "page" };
   }
 
   const page = Number.isFinite(query.page) ? Math.max(1, Math.floor(query.page!)) : 1;
@@ -381,7 +331,7 @@ async function resolveProductsForExport(query: ProductExportQuery): Promise<{ ro
     sortKey: query.sortKey,
   });
 
-  return { rows: buildExportRowsFromItems(payload.items as any[]), scope: "page" };
+  return { rows: buildExportRowsFromItems(payload.items as unknown as ProductoExportItem[]), scope: "page" };
 }
 
 export async function exportProductsFile(query: ProductExportQuery): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
@@ -389,80 +339,31 @@ export async function exportProductsFile(query: ProductExportQuery): Promise<{ b
 
   const filenameBase = scope === "all" ? "productos_all" : "productos_page";
 
+  const tableColumns: TableColumn<ExportRow>[] = [
+    { header: "Código", widthWeight: 1.1, value: (r) => r.codigo_producto },
+    { header: "Categoría", widthWeight: 0.8, value: (r) => inferCategoryFromCode(r.codigo_producto) ?? "" },
+    { header: "Producto", widthWeight: 2.4, value: (r) => r.nombre_producto },
+    { header: "Proveedor", widthWeight: 1.8, value: (r) => r.proveedor },
+    { header: "Precio venta", align: "right", widthWeight: 1.0, value: (r) => r.precio_venta },
+    { header: "Precio compra", align: "right", widthWeight: 1.0, value: (r) => r.precio_compra },
+    { header: "Margen", align: "right", widthWeight: 0.9, value: (r) => r.margen },
+    { header: "Stock", align: "right", widthWeight: 0.7, value: (r) => r.stock },
+    { header: "Stock mínimo", align: "right", widthWeight: 0.9, value: (r) => r.stock_minimo },
+  ];
+
   if (query.format === "csv") {
-    const header = [
-      "codigo_producto",
-      "categoria",
-      "nombre_producto",
-      "proveedor",
-      "precio_venta",
-      "precio_compra",
-      "margen",
-      "stock",
-      "stock_minimo",
-    ];
-    const lines = [header.join(",")];
-
-    rows.forEach((r) => {
-      const categoria = inferCategoryFromCode(r.codigo_producto) ?? "";
-      lines.push(
-        [
-          escapeCsv(r.codigo_producto),
-          escapeCsv(categoria),
-          escapeCsv(r.nombre_producto),
-          escapeCsv(r.proveedor),
-          escapeCsv(r.precio_venta),
-          escapeCsv(r.precio_compra ?? ""),
-          escapeCsv(r.margen ?? ""),
-          escapeCsv(r.stock),
-          escapeCsv(r.stock_minimo),
-        ].join(",")
-      );
-    });
-
-    const csv = `\ufeff${lines.join("\r\n")}`;
+    const buffer = await exportTableToCsv(rows, tableColumns);
     return {
-      buffer: Buffer.from(csv, "utf8"),
+      buffer,
       contentType: "text/csv; charset=utf-8",
       filename: `${filenameBase}.csv`,
     };
   }
 
   if (query.format === "xlsx") {
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Productos", { views: [{ state: "frozen", ySplit: 1 }] });
-
-    sheet.columns = [
-      { header: "Código", key: "codigo", width: 18 },
-      { header: "Categoría", key: "categoria", width: 12 },
-      { header: "Nombre", key: "nombre", width: 34 },
-      { header: "Proveedor", key: "proveedor", width: 24 },
-      { header: "Precio venta", key: "precio_venta", width: 14 },
-      { header: "Precio compra", key: "precio_compra", width: 14 },
-      { header: "Margen", key: "margen", width: 12 },
-      { header: "Stock", key: "stock", width: 10 },
-      { header: "Stock mínimo", key: "stock_minimo", width: 12 },
-    ];
-
-    sheet.getRow(1).font = { bold: true };
-
-    rows.forEach((r) => {
-      sheet.addRow({
-        codigo: r.codigo_producto,
-        categoria: inferCategoryFromCode(r.codigo_producto) ?? "",
-        nombre: r.nombre_producto,
-        proveedor: r.proveedor,
-        precio_venta: r.precio_venta,
-        precio_compra: r.precio_compra ?? "",
-        margen: r.margen ?? "",
-        stock: r.stock,
-        stock_minimo: r.stock_minimo,
-      });
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
+    const buffer = await exportTableToXlsx({ sheetName: "Productos", rows, columns: tableColumns });
     return {
-      buffer: Buffer.from(buffer),
+      buffer,
       contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       filename: `${filenameBase}.xlsx`,
     };

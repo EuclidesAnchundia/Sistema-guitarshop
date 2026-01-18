@@ -205,6 +205,17 @@ export const salesService = {
 		return normalizeVentaDetail(data)
 	},
 
+	async canCancelSale(id: number): Promise<{ canCancel: boolean; reason?: string; message?: string }> {
+		const data = await httpRequest<unknown>(`/ventas/${id}/can-cancel`)
+		if (!data || typeof data !== "object") return { canCancel: false, reason: "RESPUESTA_INVALIDA" }
+		const r = data as Record<string, unknown>
+		return {
+			canCancel: Boolean(r.canCancel),
+			reason: typeof r.reason === "string" ? r.reason : undefined,
+			message: typeof r.message === "string" ? r.message : undefined,
+		}
+	},
+
 	async reactivateSale(id: number): Promise<VentaDetailRecord> {
 		const data = await httpRequest<unknown>(`/ventas/${id}/reactivar`, { method: "POST" })
 		return normalizeVentaDetail(data)

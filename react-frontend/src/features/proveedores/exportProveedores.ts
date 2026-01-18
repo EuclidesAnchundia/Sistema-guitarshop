@@ -1,6 +1,4 @@
-import jsPDF from "jspdf"
-import "jspdf-autotable"
-import * as XLSX from "xlsx"
+// Librerías pesadas cargadas bajo demanda
 
 export type ExportRow = {
 	"ID Proveedor": string
@@ -25,14 +23,20 @@ export function exportToCSV(rows: ExportRow[], baseName: string) {
 	link.click()
 }
 
-export function exportToXLSX(rows: ExportRow[], baseName: string) {
+export async function exportToXLSX(rows: ExportRow[], baseName: string) {
+	const XLSX = await import("xlsx")
 	const worksheet = XLSX.utils.json_to_sheet(rows)
 	const workbook = XLSX.utils.book_new()
 	XLSX.utils.book_append_sheet(workbook, worksheet, "Proveedores")
 	XLSX.writeFile(workbook, `${baseName}.xlsx`)
 }
 
-export function exportToPDF(rows: ExportRow[], baseName: string) {
+export async function exportToPDF(rows: ExportRow[], baseName: string) {
+	const [{ default: jsPDF }, autoTableMod] = await Promise.all([
+		import("jspdf"),
+		import("jspdf-autotable").catch(() => null),
+	])
+
 	const doc = new jsPDF()
 
 	doc.setFontSize(16)
@@ -41,13 +45,16 @@ export function exportToPDF(rows: ExportRow[], baseName: string) {
 	const tableColumns = ["ID Proveedor", "Nombre", "Cédula/RUC", "Correo", "Teléfono", "Dirección", "Fecha Registro"]
 	const tableRows = rows.map(row => Object.values(row))
 
-	;(doc as unknown as { autoTable: (options: unknown) => void }).autoTable({
-		head: [tableColumns],
-		body: tableRows,
-		startY: 30,
-		styles: { fontSize: 8 },
-		headStyles: { fillColor: [41, 128, 185] },
-	})
+	const autoTable = autoTableMod?.default as unknown as ((doc: unknown, opts: Record<string, unknown>) => void) | undefined
+	if (autoTable) {
+		autoTable(doc, {
+			head: [tableColumns],
+			body: tableRows,
+			startY: 30,
+			styles: { fontSize: 8 },
+			headStyles: { fillColor: [41, 128, 185] },
+		} as Record<string, unknown>)
+	}
 
 	doc.save(`${baseName}.pdf`)
 }

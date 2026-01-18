@@ -109,7 +109,7 @@ export async function exportSingleProveedorPdf(proveedorId: number): Promise<{ b
       { label: "Teléfono", value: proveedor.telefono ?? "—" },
       { label: "Dirección", value: proveedor.direccion ?? "—" },
       { label: "Estado", value: proveedor.id_estado === 1 ? "ACTIVO" : `ID=${proveedor.id_estado}` },
-      { label: "Registro", value: proveedor.fecha_registro?.toISOString?.() ?? proveedor.fecha_registro },
+      { label: "Registro", value: proveedor.fecha_registro },
     ],
   });
 

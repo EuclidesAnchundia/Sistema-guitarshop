@@ -12,9 +12,11 @@ type Props = {
 }
 
 export function SaleTopBar({ form, clientes, clientesLoading }: Props) {
+  const formaPago = form.watch("forma_pago")
+
   return (
     <div className="border-b border-slate-200 bg-white px-8 py-6">
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         <div>
           <SaleClientAutocomplete
             clientes={clientes}
@@ -37,6 +39,17 @@ export function SaleTopBar({ form, clientes, clientesLoading }: Props) {
         </div>
 
         <div>
+          <label className="text-xs font-medium uppercase text-slate-500">Forma de pago</label>
+          <select
+            {...form.register("forma_pago")}
+            className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          >
+            <option value="CONTADO">Contado</option>
+            <option value="CREDITO">Crédito</option>
+          </select>
+        </div>
+
+        <div>
           <label className="text-xs font-medium uppercase text-slate-500">Observaciones</label>
           <input
             type="text"
@@ -46,6 +59,43 @@ export function SaleTopBar({ form, clientes, clientesLoading }: Props) {
           />
         </div>
       </div>
+
+      {formaPago === "CREDITO" && (
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <div>
+            <label className="text-xs font-medium uppercase text-slate-500">Número de cuotas</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              {...form.register("creditoConfig.numero_cuotas")}
+              className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium uppercase text-slate-500">Primer vencimiento</label>
+            <input
+              type="date"
+              {...form.register("creditoConfig.fecha_primer_vencimiento")}
+              className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium uppercase text-slate-500">Días entre cuotas</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              {...form.register("creditoConfig.dias_entre_cuotas")}
+              className="mt-1 h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

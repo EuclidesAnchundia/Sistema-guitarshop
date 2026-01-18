@@ -1,5 +1,3 @@
-import jsPDF from "jspdf"
-import html2canvas from "html2canvas"
 import type { VentaDetailRecord } from "../../../services/salesService"
 
 export async function downloadSalePdf(venta: VentaDetailRecord) {
@@ -11,6 +9,12 @@ export async function downloadSalePdf(venta: VentaDetailRecord) {
   }
 
   try {
+    // Cargar librerías pesadas solo cuando se requiere
+    const [{ default: jsPDF }, { default: html2canvas }] = await Promise.all([
+      import("jspdf"),
+      import("html2canvas"),
+    ])
+
     // Hacer visible temporalmente para captura
     printRoot.style.display = "block"
     printRoot.style.position = "absolute"

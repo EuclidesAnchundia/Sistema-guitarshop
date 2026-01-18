@@ -129,18 +129,30 @@ export default function ProveedoresPage() {
 	const [exportingKey, setExportingKey] = useState<string | null>(null)
 	const [selectedProveedor, setSelectedProveedor] = useState<ProveedorRecord | null>(null)
 	const [editingProveedor, setEditingProveedor] = useState<ProveedorRecord | null>(null)
+	const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+	const [deleteTarget, setDeleteTarget] = useState<ProveedorRecord | null>(null)
 
 	const debouncedSearch = useDebouncedValue(searchInput, 300)
 
 	const proveedoresQuery = useProveedoresQuery()
 	const proveedores = useMemo(() => proveedoresQuery.data ?? [], [proveedoresQuery.data])
 
+	const closeCreateDialog = () => {
+		setCreateDialogOpen(false)
+		form.reset(defaultValues)
+	}
+
+	const closeEditDialog = () => {
+		setEditDialogOpen(false)
+		setEditingProveedor(null)
+		editForm.reset(defaultValues)
+	}
+
 	const createMutation = useMutation({
 		mutationFn: (payload: ProveedorPayload) => proveedorClient.create(payload),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: proveedoresQueryKey })
-			setCreateDialogOpen(false)
-			form.reset(defaultValues)
+			closeCreateDialog()
 		},
 	})
 
@@ -149,9 +161,7 @@ export default function ProveedoresPage() {
 			proveedorClient.update(id, payload),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: proveedoresQueryKey })
-			setEditDialogOpen(false)
-			setEditingProveedor(null)
-			editForm.reset(defaultValues)
+			closeEditDialog()
 		},
 	})
 
@@ -198,11 +208,13 @@ export default function ProveedoresPage() {
 	const form = useForm<ProveedorFormValues>({
 		resolver: zodResolver(proveedorSchema),
 		defaultValues,
+		mode: "onChange",
 	})
 
 	const editForm = useForm<ProveedorFormValues>({
 		resolver: zodResolver(proveedorSchema),
 		defaultValues,
+		mode: "onChange",
 	})
 
 	useEffect(() => {
@@ -348,9 +360,9 @@ export default function ProveedoresPage() {
 
 	const handleDelete = useCallback(
 		(proveedor: ProveedorRecord) => {
-			if (confirm(`¿Estás seguro de eliminar al proveedor ${proveedor.nombre_proveedor}?`)) {
-				deleteMutation.mutate(proveedor.id_proveedor)
-			}
+			if (deleteMutation.isPending) return
+			setDeleteTarget(proveedor)
+			setDeleteConfirmOpen(true)
 		},
 		[deleteMutation]
 	)
@@ -369,6 +381,7 @@ export default function ProveedoresPage() {
 			telefono: proveedor.telefono || "",
 			direccion: proveedor.direccion || "",
 		})
+		void editForm.trigger()
 		setEditDialogOpen(true)
 	}, [editForm])
 
@@ -646,6 +659,50 @@ export default function ProveedoresPage() {
 				</div>
 			</section>
 
+			{deleteConfirmOpen && deleteTarget && (
+				<div
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Eliminar proveedor"
+				>
+					<div className="w-full max-w-md rounded-2xl bg-white p-6">
+						<h3 className="text-lg font-semibold text-slate-900">Eliminar proveedor</h3>
+						<p className="mt-2 text-sm text-slate-600">
+							Esta acción no se puede deshacer. ¿Deseas eliminar al proveedor {deleteTarget.nombre_proveedor}?
+						</p>
+
+						<div className="mt-6 flex justify-end gap-2">
+							<button
+								type="button"
+								onClick={() => {
+									if (deleteMutation.isPending) return
+									setDeleteConfirmOpen(false)
+									setDeleteTarget(null)
+								}}
+								className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+								disabled={deleteMutation.isPending}
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									deleteMutation.mutate(deleteTarget.id_proveedor)
+									setDeleteConfirmOpen(false)
+									setDeleteTarget(null)
+								}}
+								className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+								disabled={deleteMutation.isPending}
+							>
+								{deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+								Eliminar
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
 			{/* Drawers y Dialogs */}
 			<ProveedoresFiltersDrawer
 				open={filtersDrawerOpen}
@@ -691,101 +748,110 @@ export default function ProveedoresPage() {
 			<Dialog
 				open={createDialogOpen}
 				onOpenChange={(open) => {
-					if (!open) {
-						setCreateDialogOpen(false)
-						form.reset(defaultValues)
-					} else {
-						setCreateDialogOpen(true)
-					}
+					if (!open) return
+					setCreateDialogOpen(true)
 				}}
 			>
-				<DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-0 sm:rounded-3xl">
-					<DialogHeader className="border-b px-8 py-6 text-left">
-						<DialogTitle className="text-2xl font-semibold text-slate-900">Registrar proveedor</DialogTitle>
-						<DialogDescription>Agrega un nuevo proveedor al sistema.</DialogDescription>
-					</DialogHeader>
-					<div className="px-8 py-6">
-						{createMutation.isError && (
-							<div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-								{getApiErrorMessage(createMutation.error, "No se pudo registrar el proveedor")}
-							</div>
-						)}
-						<form onSubmit={form.handleSubmit(handleCreate)} className="space-y-6">
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Nombre del Proveedor
-								</label>
-								<input
-									{...form.register("nombre_proveedor")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{form.formState.errors.nombre_proveedor && (
-									<p className="mt-1 text-xs text-red-600">{form.formState.errors.nombre_proveedor.message}</p>
+				<DialogContent
+					className="w-full max-w-5xl overflow-hidden p-0 sm:rounded-3xl"
+					disableOutsideClose
+					hideCloseButton
+				>
+					<div className="flex h-[90vh] flex-col">
+						<DialogHeader className="border-b px-8 py-6 text-left">
+							<DialogTitle className="text-2xl font-semibold text-slate-900">Registrar proveedor</DialogTitle>
+							<DialogDescription>Agrega un nuevo proveedor al sistema.</DialogDescription>
+						</DialogHeader>
+
+						<form onSubmit={form.handleSubmit(handleCreate)} className="flex flex-1 flex-col overflow-hidden">
+							<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
+								{createMutation.isError && (
+									<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+										{getApiErrorMessage(createMutation.error, "No se pudo registrar el proveedor")}
+									</div>
 								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									RUC/Cédula
-								</label>
-								<input
-									{...form.register("ruc_cedula")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{form.formState.errors.ruc_cedula && (
-									<p className="mt-1 text-xs text-red-600">{form.formState.errors.ruc_cedula.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Correo
-								</label>
-								<input
-									{...form.register("correo")}
-									type="email"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{form.formState.errors.correo && (
-									<p className="mt-1 text-xs text-red-600">{form.formState.errors.correo.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Teléfono
-								</label>
-								<input
-									{...form.register("telefono")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{form.formState.errors.telefono && (
-									<p className="mt-1 text-xs text-red-600">{form.formState.errors.telefono.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Dirección
-								</label>
-								<textarea
-									{...form.register("direccion")}
-									rows={3}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{form.formState.errors.direccion && (
-									<p className="mt-1 text-xs text-red-600">{form.formState.errors.direccion.message}</p>
-								)}
+
+								<div className="grid gap-6 lg:grid-cols-2">
+									<div className="space-y-6">
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+												Nombre del Proveedor
+											</label>
+											<input
+												{...form.register("nombre_proveedor")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{form.formState.errors.nombre_proveedor && (
+												<p className="mt-1 text-xs text-red-600">{form.formState.errors.nombre_proveedor.message}</p>
+											)}
+										</div>
+
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+												RUC/Cédula
+											</label>
+											<input
+												{...form.register("ruc_cedula")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{form.formState.errors.ruc_cedula && (
+												<p className="mt-1 text-xs text-red-600">{form.formState.errors.ruc_cedula.message}</p>
+											)}
+										</div>
+									</div>
+
+									<div className="space-y-6">
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Correo</label>
+											<input
+												{...form.register("correo")}
+												type="email"
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{form.formState.errors.correo && (
+												<p className="mt-1 text-xs text-red-600">{form.formState.errors.correo.message}</p>
+											)}
+										</div>
+
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Teléfono</label>
+											<input
+												{...form.register("telefono")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{form.formState.errors.telefono && (
+												<p className="mt-1 text-xs text-red-600">{form.formState.errors.telefono.message}</p>
+											)}
+										</div>
+									</div>
+								</div>
+
+								<div>
+									<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Dirección</label>
+									<textarea
+										{...form.register("direccion")}
+										rows={4}
+										className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+									/>
+									{form.formState.errors.direccion && (
+										<p className="mt-1 text-xs text-red-600">{form.formState.errors.direccion.message}</p>
+									)}
+								</div>
 							</div>
 
-							<div className="flex justify-end gap-3">
+							<div className="flex items-center justify-end gap-3 border-t bg-white px-8 py-5">
 								<button
 									type="button"
-									onClick={() => setCreateDialogOpen(false)}
-									className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+									onClick={closeCreateDialog}
+									disabled={createMutation.isPending}
+									className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
 								>
 									Cancelar
 								</button>
 								<button
 									type="submit"
-									disabled={createMutation.isPending}
-									className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+									disabled={createMutation.isPending || !form.formState.isValid}
+									className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
 								>
 									{createMutation.isPending && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
 									Crear Proveedor
@@ -799,102 +865,110 @@ export default function ProveedoresPage() {
 			<Dialog
 				open={editDialogOpen}
 				onOpenChange={(open) => {
-					if (!open) {
-						setEditDialogOpen(false)
-						setEditingProveedor(null)
-						editForm.reset(defaultValues)
-					} else {
-						setEditDialogOpen(true)
-					}
+					if (!open) return
+					setEditDialogOpen(true)
 				}}
 			>
-				<DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-0 sm:rounded-3xl">
-					<DialogHeader className="border-b px-8 py-6 text-left">
-						<DialogTitle className="text-2xl font-semibold text-slate-900">Editar proveedor</DialogTitle>
-						<DialogDescription>Modifica la información del proveedor.</DialogDescription>
-					</DialogHeader>
-					<div className="px-8 py-6">
-						{updateMutation.isError && (
-							<div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-								{getApiErrorMessage(updateMutation.error, "No se pudo actualizar el proveedor")}
-							</div>
-						)}
-						<form onSubmit={editForm.handleSubmit(handleEdit)} className="space-y-6">
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Nombre del Proveedor
-								</label>
-								<input
-									{...editForm.register("nombre_proveedor")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{editForm.formState.errors.nombre_proveedor && (
-									<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.nombre_proveedor.message}</p>
+				<DialogContent
+					className="w-full max-w-5xl overflow-hidden p-0 sm:rounded-3xl"
+					disableOutsideClose
+					hideCloseButton
+				>
+					<div className="flex h-[90vh] flex-col">
+						<DialogHeader className="border-b px-8 py-6 text-left">
+							<DialogTitle className="text-2xl font-semibold text-slate-900">Editar proveedor</DialogTitle>
+							<DialogDescription>Modifica la información del proveedor.</DialogDescription>
+						</DialogHeader>
+
+						<form onSubmit={editForm.handleSubmit(handleEdit)} className="flex flex-1 flex-col overflow-hidden">
+							<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
+								{updateMutation.isError && (
+									<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+										{getApiErrorMessage(updateMutation.error, "No se pudo actualizar el proveedor")}
+									</div>
 								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									RUC/Cédula
-								</label>
-								<input
-									{...editForm.register("ruc_cedula")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{editForm.formState.errors.ruc_cedula && (
-									<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.ruc_cedula.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Correo
-								</label>
-								<input
-									{...editForm.register("correo")}
-									type="email"
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{editForm.formState.errors.correo && (
-									<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.correo.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Teléfono
-								</label>
-								<input
-									{...editForm.register("telefono")}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{editForm.formState.errors.telefono && (
-									<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.telefono.message}</p>
-								)}
-							</div>
-							<div>
-								<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-									Dirección
-								</label>
-								<textarea
-									{...editForm.register("direccion")}
-									rows={3}
-									className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								/>
-								{editForm.formState.errors.direccion && (
-									<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.direccion.message}</p>
-								)}
+
+								<div className="grid gap-6 lg:grid-cols-2">
+									<div className="space-y-6">
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+												Nombre del Proveedor
+											</label>
+											<input
+												{...editForm.register("nombre_proveedor")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{editForm.formState.errors.nombre_proveedor && (
+												<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.nombre_proveedor.message}</p>
+											)}
+										</div>
+
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+												RUC/Cédula
+											</label>
+											<input
+												{...editForm.register("ruc_cedula")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{editForm.formState.errors.ruc_cedula && (
+												<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.ruc_cedula.message}</p>
+											)}
+										</div>
+									</div>
+
+									<div className="space-y-6">
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Correo</label>
+											<input
+												{...editForm.register("correo")}
+												type="email"
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{editForm.formState.errors.correo && (
+												<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.correo.message}</p>
+											)}
+										</div>
+
+										<div>
+											<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Teléfono</label>
+											<input
+												{...editForm.register("telefono")}
+												className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+											/>
+											{editForm.formState.errors.telefono && (
+												<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.telefono.message}</p>
+											)}
+										</div>
+									</div>
+								</div>
+
+								<div>
+									<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Dirección</label>
+									<textarea
+										{...editForm.register("direccion")}
+										rows={4}
+										className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+									/>
+									{editForm.formState.errors.direccion && (
+										<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.direccion.message}</p>
+									)}
+								</div>
 							</div>
 
-							<div className="flex justify-end gap-3">
+							<div className="flex items-center justify-end gap-3 border-t bg-white px-8 py-5">
 								<button
 									type="button"
-									onClick={() => setEditDialogOpen(false)}
-									className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+									onClick={closeEditDialog}
+									disabled={updateMutation.isPending}
+									className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
 								>
 									Cancelar
 								</button>
 								<button
 									type="submit"
-									disabled={updateMutation.isPending}
-									className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+									disabled={updateMutation.isPending || !editForm.formState.isValid}
+									className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
 								>
 									{updateMutation.isPending && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
 									Guardar Cambios

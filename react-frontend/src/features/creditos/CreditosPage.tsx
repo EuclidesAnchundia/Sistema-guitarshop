@@ -16,6 +16,7 @@ import { formatMoney, round2 } from "../../utils/number"
 import { CreditsListHeader } from "./components/CreditsListHeader"
 import type { CreditsFilterChip } from "./components/CreditsListHeader"
 import { CreditsFiltersDrawer } from "./components/CreditsFiltersDrawer"
+import PaginationFooter from "../../components/common/PaginationFooter"
 import type { CreditsFilters } from "./components/CreditsFiltersDrawer"
 
 type SelectedInstallmentState = CreditInstallment & {
@@ -519,6 +520,15 @@ export default function CreditosPage() {
               </div>
             )}
           </div>
+          <PaginationFooter
+            currentPage={1}
+            totalPages={1}
+            pageSize={10}
+            pageSizeOptions={[10, 20, 30]}
+            onPrev={() => {}}
+            onNext={() => {}}
+            onPageSizeChange={() => {}}
+          />
         </section>
       </div>
 
@@ -672,8 +682,9 @@ export default function CreditosPage() {
                 </div>
 
                 {detailTab === "cuotas" ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-slate-200 text-sm">
                       <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3 text-left">Cuota</th>
@@ -725,8 +736,18 @@ export default function CreditosPage() {
                           )
                         })}
                       </tbody>
-                    </table>
-                  </div>
+                      </table>
+                    </div>
+                    <PaginationFooter
+                    currentPage={1}
+                    totalPages={1}
+                    pageSize={10}
+                    pageSizeOptions={[10, 20, 30]}
+                    onPrev={() => {}}
+                    onNext={() => {}}
+                    onPageSizeChange={() => {}}
+                    />
+                  </>
                 ) : (
                   <div className="p-6">
                     {(() => {

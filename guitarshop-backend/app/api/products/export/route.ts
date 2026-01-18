@@ -31,6 +31,20 @@ const parseIds = (value: string | null): number[] | undefined => {
   return ids.length > 0 ? ids : undefined;
 };
 
+const parseStockStatus = (value: string | null): ProductExportQuery["stockStatus"] | undefined => {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v === "all" || v === "normal" || v === "low" || v === "critical" || v === "risk") return v;
+  return undefined;
+};
+
+const parseSortKey = (value: string | null): ProductExportQuery["sortKey"] | undefined => {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v === "name-asc" || v === "name-desc" || v === "stock-asc" || v === "stock-desc" || v === "margin-desc") return v;
+  return undefined;
+};
+
 export async function OPTIONS() {
   return optionsCors();
 }
@@ -71,10 +85,10 @@ export async function GET(req: Request) {
       page: pageRaw ? Number(pageRaw) : undefined,
       perPage: perPageRaw ? Number(perPageRaw) : undefined,
       search: url.searchParams.get("search"),
-      sortKey: (url.searchParams.get("sortKey") as any) ?? undefined,
+      sortKey: parseSortKey(url.searchParams.get("sortKey")),
       categoryPrefix: url.searchParams.get("categoryPrefix"),
       providerId: providerIdNormalized,
-      stockStatus: (url.searchParams.get("stockStatus") as any) ?? undefined,
+      stockStatus: parseStockStatus(url.searchParams.get("stockStatus")),
 
       // Snapshot (si el frontend lo envía)
       ids: parseIds(url.searchParams.get("ids")),

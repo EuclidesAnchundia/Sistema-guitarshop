@@ -1,6 +1,6 @@
 import prisma from "../../../shared/prisma/prismaClient";
 import { recalcCreditStatus } from "./recalcCreditStatus";
-import { exportTableToCsv, exportTableToPdf, exportTableToXlsx, makeExportFilename, type ExportScope, type ExportFormat, type TableColumn } from "../../../shared/export/tableExport";
+import { exportTableToCsv, exportTableToPdf, exportTableToXlsx, exportSectionsToPdf, makeExportFilename, type ExportScope, type ExportFormat, type TableColumn } from "../../../shared/export/tableExport";
 
 export type CreditsExportQuery = {
   format: ExportFormat;
@@ -180,11 +180,123 @@ export async function exportSingleCreditPdf(creditId: number): Promise<{ buffer:
     fecha_pago: c.fecha_pago ? new Date(c.fecha_pago).toLocaleDateString("es-EC") : "—",
   }));
 
-  const buffer = await exportTableToPdf({
+  // Movimientos: evitamos consultar una tabla que aún no existe (migración pendiente).
+  const hasMovTable = await (async () => {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ name: string | null }>>`
+        SELECT to_regclass('public.movimiento_credito')::text AS name
+      `;
+      const name = rows?.[0]?.name ?? null;
+      return Boolean(name);
+    } catch {
+      return false;
+    }
+  })();
+
+  const movimientoModel = (prisma as unknown as Record<string, unknown>)["movimiento_credito"];
+  const movimientos = !hasMovTable
+    ? ([] as Array<{
+        fecha: Date;
+        tipo: string;
+        monto: unknown;
+        metodo: string;
+        referencia: string | null;
+        nota: string | null;
+        usuario: { nombre_completo: string };
+      }>)
+    : movimientoModel && typeof (movimientoModel as { findMany?: unknown }).findMany === "function"
+      ? ((await (movimientoModel as { findMany: (...args: unknown[]) => Promise<unknown> }).findMany({
+          where: { id_credito: id },
+          orderBy: { fecha: "desc" },
+          select: {
+            fecha: true,
+            tipo: true,
+            monto: true,
+            metodo: true,
+            referencia: true,
+            nota: true,
+            usuario: { select: { nombre_completo: true } },
+          },
+        })) as Array<{
+          fecha: Date;
+          tipo: string;
+          monto: unknown;
+          metodo: string;
+          referencia: string | null;
+          nota: string | null;
+          usuario: { nombre_completo: string };
+        }>)
+      : await (async () => {
+          const rows = await prisma.$queryRaw<
+            Array<{
+              fecha: Date;
+              tipo: string;
+              monto: unknown;
+              metodo: string;
+              referencia: string | null;
+              nota: string | null;
+              usuario_nombre_completo: string;
+            }>
+          >`
+            SELECT
+              mc.fecha,
+              mc.tipo,
+              mc.monto,
+              mc.metodo,
+              mc.referencia,
+              mc.nota,
+              u.nombre_completo AS usuario_nombre_completo
+            FROM movimiento_credito mc
+            JOIN usuario u ON u.id_usuario = mc.id_usuario
+            WHERE mc.id_credito = ${id}
+            ORDER BY mc.fecha DESC
+          `;
+
+          return rows.map((r) => ({
+            fecha: r.fecha,
+            tipo: r.tipo,
+            monto: r.monto,
+            metodo: r.metodo,
+            referencia: r.referencia,
+            nota: r.nota,
+            usuario: { nombre_completo: r.usuario_nombre_completo },
+          }));
+        })();
+
+  type MovimientoRow = {
+    fecha: string;
+    tipo: string;
+    monto: number;
+    metodo: string;
+    referencia: string;
+    usuario: string;
+  };
+
+  const movimientoColumns: TableColumn<MovimientoRow>[] = [
+    { header: "Fecha", widthWeight: 1.3, value: (r) => r.fecha, kind: "datetime" },
+    { header: "Tipo", widthWeight: 0.9, value: (r) => r.tipo },
+    { header: "Monto", align: "right", widthWeight: 0.9, value: (r) => r.monto, kind: "currency" },
+    { header: "Método", widthWeight: 1.0, value: (r) => r.metodo },
+    { header: "Ref/Nota", widthWeight: 1.8, value: (r) => r.referencia },
+    { header: "Usuario", widthWeight: 1.3, value: (r) => r.usuario },
+  ];
+
+  const movimientoRows: MovimientoRow[] = movimientos.map((m) => ({
+    fecha: m.fecha ? new Date(m.fecha).toLocaleString("es-EC") : "—",
+    tipo: String(m.tipo ?? "PAGO"),
+    monto: Number(m.monto ?? 0),
+    metodo: String(m.metodo ?? ""),
+    referencia: [m.referencia, m.nota].filter(Boolean).join(" · ") || "—",
+    usuario: m.usuario?.nombre_completo ?? "—",
+  }));
+
+  const buffer = await exportSectionsToPdf({
     title: `Crédito #${credito.id_credito}`,
-    subtitle: `Factura: ${saleCode} · Cliente: ${cliente} · Estado: ${recalculo.estado_credito} · Saldo: ${Number(credito.saldo_pendiente ?? 0)}`,
-    rows,
-    columns: installmentColumns,
+    subtitle: `Factura: ${saleCode} · Cliente: ${cliente} · Estado: ${recalculo.estado_credito} · Total: ${Number(credito.monto_total ?? 0)} · Saldo: ${Number(credito.saldo_pendiente ?? 0)}`,
+    sections: [
+      { title: "Cuotas", rows, columns: installmentColumns as unknown as import("../../../shared/export/tableExport").TableColumn<unknown>[] },
+      { title: "Movimientos", rows: movimientoRows, columns: movimientoColumns as unknown as import("../../../shared/export/tableExport").TableColumn<unknown>[] },
+    ],
   });
 
   return { buffer, filename: `credito_${credito.id_credito}.pdf` };
