@@ -419,11 +419,10 @@ export async function obtenerDashboardExportBundle(range: DashboardExportRange):
   const prevPeriodEnd = periodStart;
   const prevPeriodStart = buildDate(prevPeriodEnd, -diffDays(periodStart, periodEnd));
 
-  const [salesCurrent, salesPrev, costosCurrent, costosPrev] = await Promise.all([
+  const [salesCurrent, salesPrev, costosCurrent] = await Promise.all([
     getSalesSnapshot({ start: periodStart, end: periodEnd }),
     getSalesSnapshot({ start: prevPeriodStart, end: prevPeriodEnd }),
     getCostSnapshot({ start: periodStart, end: periodEnd }),
-    getCostSnapshot({ start: prevPeriodStart, end: prevPeriodEnd }),
   ]);
 
   const salesWithDelta = {

@@ -20,7 +20,6 @@ import {
 	UploadCloud,
 } from "lucide-react"
 import { toast } from "sonner"
-import * as XLSX from "xlsx"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../components/ui/drawer"
@@ -61,6 +60,7 @@ import {
 import { ProductsFiltersDrawer } from "./components/ProductsFiltersDrawer"
 import { ProductsListHeader } from "./components/ProductsListHeader"
 import { ProductsDetailDrawer } from "./components/ProductsDetailDrawer"
+import PaginationFooter from "../../components/common/PaginationFooter"
 
 type ModalMode = "single" | "import"
 
@@ -1265,27 +1265,28 @@ export default function ProductsPage() {
 		setImportError(null)
 		try {
 			const buffer = await file.arrayBuffer()
-			const workbook = XLSX.read(buffer, { type: "array" })
+			const XLSX = await import('xlsx')
+			const workbook = XLSX.read(buffer, { type: 'array' })
 			const sheet = workbook.Sheets[workbook.SheetNames[0]]
-			const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" })
+			const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
 			if (rows.length === 0) {
-				setImportError("El archivo está vacío.")
+				setImportError('El archivo está vacío.')
 				return
 			}
 			const headers = Object.keys(rows[0])
 			const mapping: Record<ImportFieldKey, string | null> = {
-				nombre_producto: guessColumnKey(headers, ["nombre", "producto"]),
-				categoria: guessColumnKey(headers, ["categoria", "tipo"]),
-				precio_venta: guessColumnKey(headers, ["precio venta", "pv"]),
-				cantidad_stock: guessColumnKey(headers, ["stock", "existencia"]),
-				proveedor: guessColumnKey(headers, ["proveedor", "vendor"]),
-				precio_compra: guessColumnKey(headers, ["precio compra", "pc"]),
-				stock_minimo: guessColumnKey(headers, ["stock minimo", "min"]),
-				descripcion: guessColumnKey(headers, ["descripcion", "detalle"]),
-				codigo_producto: guessColumnKey(headers, ["codigo", "sku"]),
+				nombre_producto: guessColumnKey(headers, ['nombre', 'producto']),
+				categoria: guessColumnKey(headers, ['categoria', 'tipo']),
+				precio_venta: guessColumnKey(headers, ['precio venta', 'pv']),
+				cantidad_stock: guessColumnKey(headers, ['stock', 'existencia']),
+				proveedor: guessColumnKey(headers, ['proveedor', 'vendor']),
+				precio_compra: guessColumnKey(headers, ['precio compra', 'pc']),
+				stock_minimo: guessColumnKey(headers, ['stock minimo', 'min']),
+				descripcion: guessColumnKey(headers, ['descripcion', 'detalle']),
+				codigo_producto: guessColumnKey(headers, ['codigo', 'sku']),
 			}
 			setImportState({ filename: file.name, headers, rows, mapping })
-			setModalMode("import")
+			setModalMode('import')
 		} catch (error) {
 			setImportError(getApiErrorMessage(error, "No pudimos leer el archivo"))
 		}
@@ -1523,20 +1524,20 @@ export default function ProductsPage() {
 
 				<div className="px-6 pb-6">
 
-				<div className="mt-4 overflow-x-auto">
-					<table className="min-w-[980px] w-full text-sm">
-						<thead className="sticky top-0 bg-slate-50">
-							<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-								<th className="py-3 pr-4">Código</th>
-								<th className="py-3 pr-4">Producto</th>
-								<th className="py-3 pr-4">Proveedor</th>
-								<th className="py-3 pr-4">Precios</th>
-								<th className="py-3 pr-4">Stock</th>
-								<th className="py-3 pr-4">Detalle</th>
-								<th className="py-3 text-right">Acciones</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-slate-200">
+					<div className="mt-4 overflow-x-auto">
+						<table className="min-w-[980px] w-full text-sm">
+							<thead className="sticky top-0 bg-slate-50">
+								<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+									<th className="py-3 pr-4">Código</th>
+									<th className="py-3 pr-4">Producto</th>
+									<th className="py-3 pr-4">Proveedor</th>
+									<th className="py-3 pr-4">Precios</th>
+									<th className="py-3 pr-4">Stock</th>
+									<th className="py-3 pr-4">Detalle</th>
+									<th className="py-3 text-right">Acciones</th>
+								</tr>
+							</thead>
+							<tbody className="divide-y divide-slate-200">
 								{productosQuery.isLoading && productosQuery.data === undefined
 									? Array.from({ length: Math.min(pageSize, 8) }).map((_, index) => (
 										<tr key={`productos-skeleton-${index}`} className="animate-pulse">
@@ -1577,121 +1578,88 @@ export default function ProductsPage() {
 										const purchaseDisplay = costo === null ? "—" : currency.format(costo)
 										const margin = producto.margen ?? (costo === null ? null : computeMargin(costo, producto.precio_venta))
 										const stockStatusClass =
-									stockStatus === "SIN_STOCK"
-										? "bg-slate-100 text-slate-700"
-										: stockStatus === "CRITICAL"
-											? "bg-red-50 text-red-700"
-											: stockStatus === "LOW"
-												? "bg-amber-50 text-amber-700"
-												: "bg-emerald-50 text-emerald-700"
+											stockStatus === "SIN_STOCK"
+												? "bg-slate-100 text-slate-700"
+												: stockStatus === "CRITICAL"
+													? "bg-red-50 text-red-700"
+													: stockStatus === "LOW"
+														? "bg-amber-50 text-amber-700"
+														: "bg-emerald-50 text-emerald-700"
 
-								return (
-									<tr
-										key={producto.id_producto}
-										className="hover:bg-slate-50"
-									>
-										<td className="py-3 pr-4 align-top">
-											<div className="flex flex-wrap items-center gap-2">
-												<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-													{producto.codigo_producto}
-												</span>
-												<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-													{(inferred ?? "N/D").toUpperCase()}
-												</span>
-											</div>
-										</td>
-										<td className="py-3 pr-4 align-top">
-											<p className="text-sm font-semibold text-slate-900">{producto.nombre_producto}</p>
-											{producto.descripcion && <p className="mt-1 line-clamp-1 text-xs text-slate-500">{producto.descripcion}</p>}
-										</td>
-										<td className="py-3 pr-4 align-top text-sm font-semibold text-slate-900">
-											{producto.proveedor_nombre ?? producto.proveedor?.nombre_proveedor ?? "Sin proveedor"}
-										</td>
-										<td className="py-3 pr-4 align-top">
-											<p className="text-xs font-semibold text-slate-900">Venta: {currency.format(producto.precio_venta)}</p>
-											<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-												<span>Compra: {purchaseDisplay}</span>
-												{costo !== null ? null : (
-													<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-														Sin costo
-													</span>
-												)}
-											</p>
-											<p className="mt-1 text-xs text-slate-500">Margen: {margin === null ? "—" : currency.format(margin)}</p>
-										</td>
-										<td className="py-3 pr-4 align-top">
-											<div className="flex flex-wrap items-center gap-2">
-												<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>{stockStatusText}</span>
-											</div>
-										</td>
-										<td className="py-3 pr-4 align-top" onClick={(e) => e.stopPropagation()}>
-											<button
-												type="button"
-												onClick={() => openDetail(producto)}
-												className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-												aria-label="Ver"
+										return (
+											<tr
+												key={producto.id_producto}
+												className="hover:bg-slate-50"
 											>
-												<Eye className="mr-1 inline h-4 w-4" />
-												Ver
-											</button>
-										</td>
-										<td className="py-3 pr-4 align-top text-right" onClick={(e) => e.stopPropagation()}>
-											<div className="inline-flex items-center justify-end">
-												<ProductActionsMenu producto={producto} />
-											</div>
-										</td>
-									</tr>
-								)
-							})}
-						</tbody>
-					</table>
-				</div>
-
-			{totalPages > 1 && (
-				<div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
-					<div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
-
-					<div className="flex items-center gap-2">
-						<button
-							type="button"
-							onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-							disabled={currentPage <= 1}
-							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							Anterior
-						</button>
-						<span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
-							{currentPage}
-						</span>
-						<button
-							type="button"
-							onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-							disabled={currentPage >= totalPages}
-							className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-						>
-							Siguiente
-						</button>
+												<td className="py-3 pr-4 align-top">
+													<div className="flex flex-wrap items-center gap-2">
+														<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+															{producto.codigo_producto}
+														</span>
+														<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+															{(inferred ?? "N/D").toUpperCase()}
+														</span>
+													</div>
+												</td>
+												<td className="py-3 pr-4 align-top">
+													<p className="text-sm font-semibold text-slate-900">{producto.nombre_producto}</p>
+													{producto.descripcion && <p className="mt-1 line-clamp-1 text-xs text-slate-500">{producto.descripcion}</p>}
+												</td>
+												<td className="py-3 pr-4 align-top text-sm font-semibold text-slate-900">
+													{producto.proveedor_nombre ?? producto.proveedor?.nombre_proveedor ?? "Sin proveedor"}
+												</td>
+												<td className="py-3 pr-4 align-top">
+													<p className="text-xs font-semibold text-slate-900">Venta: {currency.format(producto.precio_venta)}</p>
+													<p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+														<span>Compra: {purchaseDisplay}</span>
+														{costo !== null ? null : (
+															<span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+																Sin costo
+															</span>
+														)}
+													</p>
+													<p className="mt-1 text-xs text-slate-500">Margen: {margin === null ? "—" : currency.format(margin)}</p>
+												</td>
+												<td className="py-3 pr-4 align-top">
+													<div className="flex flex-wrap items-center gap-2">
+														<span className={`rounded-full px-3 py-1 text-xs font-semibold ${stockStatusClass}`}>{stockStatusText}</span>
+													</div>
+												</td>
+												<td className="py-3 pr-4 align-top" onClick={(e) => e.stopPropagation()}>
+													<button
+														type="button"
+														onClick={() => openDetail(producto)}
+														className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+														aria-label="Ver"
+													>
+														<Eye className="mr-1 inline h-4 w-4" />
+														Ver
+													</button>
+												</td>
+												<td className="py-3 pr-4 align-top text-right" onClick={(e) => e.stopPropagation()}>
+													<div className="inline-flex items-center justify-end">
+														<ProductActionsMenu producto={producto} />
+													</div>
+												</td>
+											</tr>
+										)
+									})}
+							</tbody>
+						</table>
 					</div>
 
-					<div className="inline-flex items-center gap-3">
-						<label htmlFor="products-page-size-bottom" className="text-sm font-semibold text-slate-800">
-							Por página
-						</label>
-						<select
-							id="products-page-size-bottom"
-							value={String(pageSize)}
-							onChange={(event) => setPageSize(Number(event.target.value) as PageSizeOption)}
-							className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-						>
-							{PAGE_SIZE_OPTIONS.map((opt) => (
-								<option key={opt} value={opt}>
-									{opt}
-								</option>
-							))}
-						</select>
-					</div>
-				</div>
-			)}
+					<PaginationFooter
+						currentPage={currentPage}
+						totalPages={totalPages}
+						pageSize={Number(pageSize)}
+						pageSizeOptions={PAGE_SIZE_OPTIONS}
+						onPrev={() => setCurrentPage((page) => Math.max(1, page - 1))}
+						onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+						onPageSizeChange={(next) => {
+							setPageSize(next as PageSizeOption)
+							setCurrentPage(1)
+						}}
+					/>
 				</div>
 
 				{productosQuery.isLoading && (
@@ -1882,22 +1850,20 @@ export default function ProductsPage() {
 										setModalMode("single")
 									}
 								}}
-								className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-									modalMode !== "import"
+								className={`rounded-full px-4 py-2 text-sm font-semibold transition ${modalMode !== "import"
 										? "bg-emerald-600 text-white"
 										: "border border-slate-200 text-slate-600 hover:border-slate-300"
-								}`}
+									}`}
 							>
 								Registrar
 							</button>
 							{!editingProduct && (
 								<button
 									onClick={() => setModalMode("import")}
-									className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
-										modalMode === "import"
+									className={`rounded-full px-4 py-2 text-sm font-semibold transition ${modalMode === "import"
 											? "bg-emerald-600 text-white"
 											: "border border-slate-200 text-slate-600 hover:border-slate-300"
-									}`}
+										}`}
 								>
 									Importar Excel
 								</button>
@@ -1906,65 +1872,65 @@ export default function ProductsPage() {
 						</div>
 
 						{modalMode === "single" && (
-								(editingProduct ? (
-									<form onSubmit={onSubmit} className="flex flex-1 flex-col overflow-hidden">
-										<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
-											<div className="grid gap-4 md:grid-cols-3">
-												<div>
-													<label className="text-xs font-medium uppercase text-slate-500">Categoría</label>
-													<select
-														{...form.register("categoria")}
-															className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+							(editingProduct ? (
+								<form onSubmit={onSubmit} className="flex flex-1 flex-col overflow-hidden">
+									<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
+										<div className="grid gap-4 md:grid-cols-3">
+											<div>
+												<label className="text-xs font-medium uppercase text-slate-500">Categoría</label>
+												<select
+													{...form.register("categoria")}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												>
-															<option value="" className="text-slate-400">
-																Selecciona una categoría
-															</option>
-														{productCategories.map((category) => (
-															<option key={category.value} value={category.value}>
-																{category.label}
-															</option>
-														))}
-													</select>
-													{form.formState.errors.categoria && (
-														<p className="mt-1 text-xs text-red-600">{form.formState.errors.categoria.message}</p>
-													)}
-												</div>
-												<div className="md:col-span-2">
-													<label className="text-xs font-medium uppercase text-slate-500">Código generado</label>
-													<input
-														readOnly
-														{...form.register("codigo_producto")}
-														className="mt-1 w-full rounded-xl border border-dashed border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold tracking-[0.2em] text-emerald-900"
-													/>
-													<p className="mt-1 text-xs text-emerald-700">
-														El sistema garantiza unicidad (ej. CRD-001). Cambia la categoría para ajustar el prefijo.
-													</p>
-												</div>
+													<option value="" className="text-slate-400">
+														Selecciona una categoría
+													</option>
+													{productCategories.map((category) => (
+														<option key={category.value} value={category.value}>
+															{category.label}
+														</option>
+													))}
+												</select>
+												{form.formState.errors.categoria && (
+													<p className="mt-1 text-xs text-red-600">{form.formState.errors.categoria.message}</p>
+												)}
 											</div>
+											<div className="md:col-span-2">
+												<label className="text-xs font-medium uppercase text-slate-500">Código generado</label>
+												<input
+													readOnly
+													{...form.register("codigo_producto")}
+													className="mt-1 w-full rounded-xl border border-dashed border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold tracking-[0.2em] text-emerald-900"
+												/>
+												<p className="mt-1 text-xs text-emerald-700">
+													El sistema garantiza unicidad (ej. CRD-001). Cambia la categoría para ajustar el prefijo.
+												</p>
+											</div>
+										</div>
 
 										<div className="grid gap-4 md:grid-cols-2">
 											<div>
 												<label className="text-xs font-medium uppercase text-slate-500">Nombre</label>
 												<input
 													{...form.register("nombre_producto")}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 													placeholder="Ej. Cuerda Ernie Ball 09"
 												/>
 												{form.formState.errors.nombre_producto && (
-														<p className="mt-1 text-xs text-red-600">{form.formState.errors.nombre_producto.message}</p>
-													)}
+													<p className="mt-1 text-xs text-red-600">{form.formState.errors.nombre_producto.message}</p>
+												)}
 											</div>
 											<div>
 												<label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
 												<select
 													{...form.register("id_proveedor")}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-														disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
 													defaultValue=""
 												>
-														<option value="" className="text-slate-400">
-															Selecciona un proveedor
-														</option>
+													<option value="" className="text-slate-400">
+														Selecciona un proveedor
+													</option>
 													{proveedores.map((prov) => (
 														<option key={prov.id_proveedor} value={prov.id_proveedor}>
 															{prov.nombre_proveedor}
@@ -1972,8 +1938,8 @@ export default function ProductsPage() {
 													))}
 												</select>
 												{form.formState.errors.id_proveedor && (
-														<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
-													)}
+													<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
+												)}
 											</div>
 										</div>
 
@@ -1982,7 +1948,7 @@ export default function ProductsPage() {
 											<textarea
 												rows={3}
 												{...form.register("descripcion")}
-													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+												className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												placeholder="Material, marca, observaciones..."
 											/>
 											{form.formState.errors.descripcion && (
@@ -1996,10 +1962,10 @@ export default function ProductsPage() {
 												<input
 													type="number"
 													step="0.01"
-															{...form.register("precio_compra", {
-																onChange: () => form.clearErrors("precio_compra"),
-															})}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													{...form.register("precio_compra", {
+														onChange: () => form.clearErrors("precio_compra"),
+													})}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												/>
 												{form.formState.errors.precio_compra && (
 													<p className="mt-1 text-xs text-red-600">{form.formState.errors.precio_compra.message}</p>
@@ -2010,10 +1976,10 @@ export default function ProductsPage() {
 												<input
 													type="number"
 													step="0.01"
-															{...form.register("precio_venta", {
-																onChange: () => form.clearErrors("precio_venta"),
-															})}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													{...form.register("precio_venta", {
+														onChange: () => form.clearErrors("precio_venta"),
+													})}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												/>
 												{form.formState.errors.precio_venta && (
 													<p className="mt-1 text-xs text-red-600">{form.formState.errors.precio_venta.message}</p>
@@ -2023,10 +1989,10 @@ export default function ProductsPage() {
 												<label className="text-xs font-medium uppercase text-slate-500">Stock actual</label>
 												<input
 													type="number"
-															{...form.register("cantidad_stock", {
-																onChange: () => form.clearErrors("cantidad_stock"),
-															})}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													{...form.register("cantidad_stock", {
+														onChange: () => form.clearErrors("cantidad_stock"),
+													})}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												/>
 												{form.formState.errors.cantidad_stock && (
 													<p className="mt-1 text-xs text-red-600">{form.formState.errors.cantidad_stock.message}</p>
@@ -2036,10 +2002,10 @@ export default function ProductsPage() {
 												<label className="text-xs font-medium uppercase text-slate-500">Stock mínimo</label>
 												<input
 													type="number"
-															{...form.register("stock_minimo", {
-																onChange: () => form.clearErrors("stock_minimo"),
-															})}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													{...form.register("stock_minimo", {
+														onChange: () => form.clearErrors("stock_minimo"),
+													})}
+													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 												/>
 												{form.formState.errors.stock_minimo && (
 													<p className="mt-1 text-xs text-red-600">{form.formState.errors.stock_minimo.message}</p>
@@ -2054,18 +2020,16 @@ export default function ProductsPage() {
 													<button
 														type="button"
 														onClick={() => handleImageModeChange("url")}
-														className={`rounded-full px-3 py-1 font-semibold ${
-															imageMode === "url" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600"
-													}`}
+														className={`rounded-full px-3 py-1 font-semibold ${imageMode === "url" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600"
+															}`}
 													>
 														Enlace público
 													</button>
 													<button
 														type="button"
 														onClick={() => handleImageModeChange("upload")}
-														className={`rounded-full px-3 py-1 font-semibold ${
-															imageMode === "upload" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600"
-													}`}
+														className={`rounded-full px-3 py-1 font-semibold ${imageMode === "upload" ? "bg-emerald-600 text-white" : "border border-slate-200 text-slate-600"
+															}`}
 													>
 														Archivo local
 													</button>
@@ -2075,7 +2039,7 @@ export default function ProductsPage() {
 												<div className="mt-3">
 													<input
 														{...form.register("imagen_url")}
-																className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+														className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 														placeholder="https://cdn-loja.com/preview.jpg"
 													/>
 													<p className="mt-1 text-xs text-slate-500">Solo referenciamos vistas ligeras. El sistema de ventas cargará las imágenes completas.</p>
@@ -2129,224 +2093,224 @@ export default function ProductsPage() {
 											Guardar
 										</button>
 									</div>
-									</form>
-								) : (
-									<div className="flex flex-1 flex-col overflow-hidden">
-										<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
-												<div className="rounded-2xl border border-slate-200 p-4">
-													<p className="text-sm font-semibold text-slate-700">Categoría y proveedor</p>
-												<div className="mt-4 grid gap-4 md:grid-cols-2">
-													<div>
-														<label className="text-xs font-medium uppercase text-slate-500">Categoría</label>
-														<select
-															{...form.register("categoria")}
-															className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-														>
-															<option value="" className="text-slate-400">
-																Selecciona una categoría
-															</option>
-															{productCategories.map((category) => (
-																<option key={category.value} value={category.value}>
-																	{category.label}
-																</option>
-															))}
-														</select>
-														{form.formState.errors.categoria && (
-															<p className="mt-1 text-xs text-red-600">{form.formState.errors.categoria.message}</p>
-														)}
-													</div>
-													<div>
-														<label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
-														<select
-															{...form.register("id_proveedor")}
-															className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-															disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
-															defaultValue=""
-														>
-															<option value="" className="text-slate-400">
-																Selecciona un proveedor
-															</option>
-															{proveedores.map((prov) => (
-																<option key={prov.id_proveedor} value={prov.id_proveedor}>
-																	{prov.nombre_proveedor}
-																</option>
-															))}
-														</select>
-														{form.formState.errors.id_proveedor && (
-															<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
-														)}
-													</div>
-												</div>
-											</div>
-
-											<div className="rounded-2xl border border-slate-200 p-4">
-												<div className="flex flex-wrap items-center justify-between gap-3">
-													<div>
-														<p className="text-sm font-semibold text-slate-700">Productos</p>
-													</div>
-													<button
-														type="button"
-														onClick={() => {
-															setBatchRows((rows) => {
-																const categoria = (form.getValues("categoria") as ProductCategoryValue | "") ?? ""
-																const newRow = createBlankBatchRow()
-																if (!categoria) return [...rows, newRow]
-																const prefix = getCategoryPrefix(categoria)
-																if (!prefix) return [...rows, newRow]
-																const taken = new Set<string>(dialogEffectiveTakenCodes)
-																rows.forEach((row) => {
-																	if (row.codigo_producto) taken.add(row.codigo_producto.toUpperCase())
-																})
-																const codigo = buildNextCode(prefix, taken)
-																return [...rows, { ...newRow, codigo_producto: codigo }]
-															})
-														}}
-														className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
+								</form>
+							) : (
+								<div className="flex flex-1 flex-col overflow-hidden">
+									<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
+										<div className="rounded-2xl border border-slate-200 p-4">
+											<p className="text-sm font-semibold text-slate-700">Categoría y proveedor</p>
+											<div className="mt-4 grid gap-4 md:grid-cols-2">
+												<div>
+													<label className="text-xs font-medium uppercase text-slate-500">Categoría</label>
+													<select
+														{...form.register("categoria")}
+														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 													>
-														<Plus className="h-4 w-4" />
-														Agregar fila
-													</button>
+														<option value="" className="text-slate-400">
+															Selecciona una categoría
+														</option>
+														{productCategories.map((category) => (
+															<option key={category.value} value={category.value}>
+																{category.label}
+															</option>
+														))}
+													</select>
+													{form.formState.errors.categoria && (
+														<p className="mt-1 text-xs text-red-600">{form.formState.errors.categoria.message}</p>
+													)}
 												</div>
-
-												<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-													<p className="text-xs text-slate-600">
-														Listos: <span className="font-semibold text-slate-900">{batchReadyCount}</span> / {batchRows.length}
-													</p>
-												</div>
-
-												<div className="mt-4 overflow-x-auto">
-													<table className="min-w-[980px] w-full text-sm">
-														<thead>
-															<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-																<th className="py-2 pr-3">Código</th>
-																<th className="py-2 pr-3">Nombre</th>
-																<th className="py-2 pr-3">Compra</th>
-																<th className="py-2 pr-3">Venta</th>
-																<th className="py-2 pr-3">Stock</th>
-																<th className="py-2 pr-3">Mínimo</th>
-																<th className="py-2">Estado</th>
-															</tr>
-														</thead>
-														<tbody className="divide-y divide-slate-200">
-															{batchRows.map((row) => {
-																const issues = getBatchRowIssues(row)
-																const saveError = batchRowSaveErrors[row.id]
-																const hasProblems = issues.length > 0 || Boolean(saveError)
-																return (
-																	<tr key={row.id} className={hasProblems ? "bg-red-50/30" : undefined}>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				readOnly
-																				value={row.codigo_producto}
-																				placeholder="Selecciona categoría"
-																					className="w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold tracking-[0.16em] text-slate-700"
-																			/>
-																		</td>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				value={row.nombre_producto}
-																				onChange={(event) => handleBatchFieldChange(row.id, "nombre_producto", event.target.value)}
-																				className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-																				placeholder="Nombre del producto"
-																			/>
-																		</td>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				type="number"
-																				step="0.01"
-																				value={row.precio_compra}
-																				onChange={(event) => handleBatchFieldChange(row.id, "precio_compra", Number(event.target.value))}
-																				className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-																			/>
-																		</td>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				type="number"
-																				step="0.01"
-																				value={row.precio_venta}
-																				onChange={(event) => handleBatchFieldChange(row.id, "precio_venta", Number(event.target.value))}
-																				className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-																			/>
-																		</td>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				type="number"
-																				value={row.cantidad_stock}
-																				onChange={(event) => handleBatchFieldChange(row.id, "cantidad_stock", Number(event.target.value))}
-																				className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-																			/>
-																		</td>
-																		<td className="py-3 pr-3 align-top">
-																			<input
-																				type="number"
-																				value={row.stock_minimo}
-																				onChange={(event) => handleBatchFieldChange(row.id, "stock_minimo", Number(event.target.value))}
-																				className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-																			/>
-																		</td>
-																		<td className="py-3 align-top">
-																			<div className="flex items-start justify-between gap-2">
-																				<div className="min-w-0">
-																					{issues.length > 0 ? (
-																						<p className="text-xs font-semibold text-amber-700">Faltan: {issues.join(", ")}</p>
-																					) : (
-																						<p className="text-xs font-semibold text-emerald-700">Lista</p>
-																					)}
-																					{saveError && <p className="mt-1 text-xs text-red-700">{saveError}</p>}
-																				</div>
-																				<button
-																					type="button"
-																					onClick={() => {
-																						setBatchRowSaveErrors((prev) => {
-																								if (!prev[row.id]) return prev
-																								const copy = { ...prev }
-																								delete copy[row.id]
-																								return copy
-																							})
-																						setBatchRows((rows) => rows.filter((item) => item.id !== row.id))
-																					}}
-																					className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50"
-																					disabled={batchRows.length <= 1}
-																				>
-																					<Trash2 className="h-4 w-4" />
-																				</button>
-																			</div>
-																		</td>
-																	</tr>
-																)
-														})}
-														</tbody>
-													</table>
+												<div>
+													<label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
+													<select
+														{...form.register("id_proveedor")}
+														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+														disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
+														defaultValue=""
+													>
+														<option value="" className="text-slate-400">
+															Selecciona un proveedor
+														</option>
+														{proveedores.map((prov) => (
+															<option key={prov.id_proveedor} value={prov.id_proveedor}>
+																{prov.nombre_proveedor}
+															</option>
+														))}
+													</select>
+													{form.formState.errors.id_proveedor && (
+														<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
+													)}
 												</div>
 											</div>
 										</div>
 
-										<div className="flex justify-end gap-2 border-t border-slate-200 px-8 py-4">
-											<button
-												type="button"
-												onClick={closeDialog}
-												className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-											>
-												Cancelar
-											</button>
-											<button
-												type="button"
-												onClick={() => {
-													requestAnimationFrame(() => {
-														requestAnimationFrame(() => {
-															void handleBatchSubmit()
+										<div className="rounded-2xl border border-slate-200 p-4">
+											<div className="flex flex-wrap items-center justify-between gap-3">
+												<div>
+													<p className="text-sm font-semibold text-slate-700">Productos</p>
+												</div>
+												<button
+													type="button"
+													onClick={() => {
+														setBatchRows((rows) => {
+															const categoria = (form.getValues("categoria") as ProductCategoryValue | "") ?? ""
+															const newRow = createBlankBatchRow()
+															if (!categoria) return [...rows, newRow]
+															const prefix = getCategoryPrefix(categoria)
+															if (!prefix) return [...rows, newRow]
+															const taken = new Set<string>(dialogEffectiveTakenCodes)
+															rows.forEach((row) => {
+																if (row.codigo_producto) taken.add(row.codigo_producto.toUpperCase())
+															})
+															const codigo = buildNextCode(prefix, taken)
+															return [...rows, { ...newRow, codigo_producto: codigo }]
 														})
-													})
-												}}
-												className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-												disabled={batchSubmitting || batchReadyCount === 0 || noProveedoresDisponibles}
-											>
-												{batchSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-												Guardar {batchReadyCount} producto{batchReadyCount === 1 ? "" : "s"}
-											</button>
+													}}
+													className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
+												>
+													<Plus className="h-4 w-4" />
+													Agregar fila
+												</button>
+											</div>
+
+											<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+												<p className="text-xs text-slate-600">
+													Listos: <span className="font-semibold text-slate-900">{batchReadyCount}</span> / {batchRows.length}
+												</p>
+											</div>
+
+											<div className="mt-4 overflow-x-auto">
+												<table className="min-w-[980px] w-full text-sm">
+													<thead>
+														<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+															<th className="py-2 pr-3">Código</th>
+															<th className="py-2 pr-3">Nombre</th>
+															<th className="py-2 pr-3">Compra</th>
+															<th className="py-2 pr-3">Venta</th>
+															<th className="py-2 pr-3">Stock</th>
+															<th className="py-2 pr-3">Mínimo</th>
+															<th className="py-2">Estado</th>
+														</tr>
+													</thead>
+													<tbody className="divide-y divide-slate-200">
+														{batchRows.map((row) => {
+															const issues = getBatchRowIssues(row)
+															const saveError = batchRowSaveErrors[row.id]
+															const hasProblems = issues.length > 0 || Boolean(saveError)
+															return (
+																<tr key={row.id} className={hasProblems ? "bg-red-50/30" : undefined}>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			readOnly
+																			value={row.codigo_producto}
+																			placeholder="Selecciona categoría"
+																			className="w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold tracking-[0.16em] text-slate-700"
+																		/>
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			value={row.nombre_producto}
+																			onChange={(event) => handleBatchFieldChange(row.id, "nombre_producto", event.target.value)}
+																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																			placeholder="Nombre del producto"
+																		/>
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			type="number"
+																			step="0.01"
+																			value={row.precio_compra}
+																			onChange={(event) => handleBatchFieldChange(row.id, "precio_compra", Number(event.target.value))}
+																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																		/>
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			type="number"
+																			step="0.01"
+																			value={row.precio_venta}
+																			onChange={(event) => handleBatchFieldChange(row.id, "precio_venta", Number(event.target.value))}
+																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																		/>
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			type="number"
+																			value={row.cantidad_stock}
+																			onChange={(event) => handleBatchFieldChange(row.id, "cantidad_stock", Number(event.target.value))}
+																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																		/>
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<input
+																			type="number"
+																			value={row.stock_minimo}
+																			onChange={(event) => handleBatchFieldChange(row.id, "stock_minimo", Number(event.target.value))}
+																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																		/>
+																	</td>
+																	<td className="py-3 align-top">
+																		<div className="flex items-start justify-between gap-2">
+																			<div className="min-w-0">
+																				{issues.length > 0 ? (
+																					<p className="text-xs font-semibold text-amber-700">Faltan: {issues.join(", ")}</p>
+																				) : (
+																					<p className="text-xs font-semibold text-emerald-700">Lista</p>
+																				)}
+																				{saveError && <p className="mt-1 text-xs text-red-700">{saveError}</p>}
+																			</div>
+																			<button
+																				type="button"
+																				onClick={() => {
+																					setBatchRowSaveErrors((prev) => {
+																						if (!prev[row.id]) return prev
+																						const copy = { ...prev }
+																						delete copy[row.id]
+																						return copy
+																					})
+																					setBatchRows((rows) => rows.filter((item) => item.id !== row.id))
+																				}}
+																				className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50"
+																				disabled={batchRows.length <= 1}
+																			>
+																				<Trash2 className="h-4 w-4" />
+																			</button>
+																		</div>
+																	</td>
+																</tr>
+															)
+														})}
+													</tbody>
+												</table>
+											</div>
 										</div>
 									</div>
-								))
+
+									<div className="flex justify-end gap-2 border-t border-slate-200 px-8 py-4">
+										<button
+											type="button"
+											onClick={closeDialog}
+											className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+										>
+											Cancelar
+										</button>
+										<button
+											type="button"
+											onClick={() => {
+												requestAnimationFrame(() => {
+													requestAnimationFrame(() => {
+														void handleBatchSubmit()
+													})
+												})
+											}}
+											className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+											disabled={batchSubmitting || batchReadyCount === 0 || noProveedoresDisponibles}
+										>
+											{batchSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+											Guardar {batchReadyCount} producto{batchReadyCount === 1 ? "" : "s"}
+										</button>
+									</div>
+								</div>
+							))
 						)}
 
 						{modalMode === "import" && (
@@ -2397,11 +2361,11 @@ export default function ProductsPage() {
 																		prev ? { ...prev, mapping: { ...prev.mapping, [field.key]: event.target.value || null } } : prev
 																	)
 																}
-																		className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 															>
-																		<option value="" className="text-slate-400">
-																			Sin asignar
-																		</option>
+																<option value="" className="text-slate-400">
+																	Sin asignar
+																</option>
 																{importState.headers.map((header) => (
 																	<option key={header} value={header}>
 																		{header}
@@ -2537,50 +2501,50 @@ export default function ProductsPage() {
 				onClose={closeDetail}
 			/>
 
-			<Dialog
-				open={deleteConfirmOpen}
-				onOpenChange={(open) => {
-					if (!open) {
-						setDeleteConfirmOpen(false)
-						setDeleteTarget(null)
-					}
-				}}
-			>
-				<DialogContent className="dialog-content max-w-md" hideCloseButton>
-					<DialogHeader>
-						<DialogTitle>Confirmar eliminación</DialogTitle>
-						<DialogDescription>
-							¿Seguro que deseas eliminar {deleteTarget?.nombre_producto ?? "este producto"}? Esta acción es permanente.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="mt-4 flex items-center justify-end gap-2">
-						<button
-							type="button"
-							onClick={() => {
-							setDeleteConfirmOpen(false)
-							setDeleteTarget(null)
-						}}
-							className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-						>
-							Cancelar
-						</button>
-						<button
-							type="button"
-							disabled={deleteMutation.isPending || !deleteTarget}
-							onClick={() => {
-							if (!deleteTarget) return
-							deleteMutation.mutate(deleteTarget.id_producto)
-							setDeleteConfirmOpen(false)
-							setDeleteTarget(null)
-						}}
-							className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-						>
-							{deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-							Eliminar
-						</button>
+
+			{deleteConfirmOpen && deleteTarget && (
+				<div
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Eliminar producto"
+				>
+					<div className="w-full max-w-md rounded-2xl bg-white p-6">
+						<h3 className="text-lg font-semibold text-slate-900">Eliminar producto</h3>
+						<p className="mt-2 text-sm text-slate-600">
+							Esta acción no se puede deshacer. ¿Deseas eliminar {deleteTarget.nombre_producto}?
+						</p>
+
+						<div className="mt-6 flex justify-end gap-2">
+							<button
+								type="button"
+								onClick={() => {
+									if (deleteMutation.isPending) return
+									setDeleteConfirmOpen(false)
+									setDeleteTarget(null)
+								}}
+								className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+								disabled={deleteMutation.isPending}
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									deleteMutation.mutate(deleteTarget.id_producto)
+									setDeleteConfirmOpen(false)
+									setDeleteTarget(null)
+								}}
+								className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+								disabled={deleteMutation.isPending}
+							>
+								{deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+								Eliminar
+							</button>
+						</div>
 					</div>
-				</DialogContent>
-			</Dialog>
+				</div>
+			)}
 
 			<Drawer
 				open={false}
@@ -2607,15 +2571,15 @@ export default function ProductsPage() {
 
 										return (
 											<>
-									<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-										{detailProduct.codigo_producto}
-									</span>
-									<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-										{(inferCategoryFromCode(detailProduct.codigo_producto) ?? "N/D").toUpperCase()}
-									</span>
-									<span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{stockStatusLabel(status)}</span>
-										</>
-									)
+												<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+													{detailProduct.codigo_producto}
+												</span>
+												<span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
+													{(inferCategoryFromCode(detailProduct.codigo_producto) ?? "N/D").toUpperCase()}
+												</span>
+												<span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{stockStatusLabel(status)}</span>
+											</>
+										)
 									})()}
 								</DrawerDescription>
 								<div className="mt-4 flex flex-wrap items-center gap-2">
@@ -2744,75 +2708,75 @@ export default function ProductsPage() {
 								})()}
 
 								<div className="rounded-2xl border border-slate-200 p-4">
-								<p className="text-sm font-semibold text-slate-700">Ventas</p>
-								{productSalesQuery.isLoading ? (
-									<p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-										<Loader2 className="h-4 w-4 animate-spin" /> Cargando...
-									</p>
-								) : productSalesQuery.isError ? (
-									<p className="mt-2 text-sm text-red-600">No se pudo cargar el historial.</p>
-								) : (
-									<>
+									<p className="text-sm font-semibold text-slate-700">Ventas</p>
+									{productSalesQuery.isLoading ? (
+										<p className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+											<Loader2 className="h-4 w-4 animate-spin" /> Cargando...
+										</p>
+									) : productSalesQuery.isError ? (
+										<p className="mt-2 text-sm text-red-600">No se pudo cargar el historial.</p>
+									) : (
+										<>
 											<div className="mt-3 grid gap-4 sm:grid-cols-3">
-											<div>
-												<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total vendido</p>
-												<p className="mt-1 text-2xl font-semibold text-slate-900">{productSalesQuery.data?.totalUnitsSold ?? 0}</p>
-											</div>
-											<div>
+												<div>
+													<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total vendido</p>
+													<p className="mt-1 text-2xl font-semibold text-slate-900">{productSalesQuery.data?.totalUnitsSold ?? 0}</p>
+												</div>
+												<div>
 													<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Últimos 30 días</p>
 													<p className="mt-1 text-2xl font-semibold text-slate-900">{productSalesQuery.data?.last30DaysUnitsSold ?? 0}</p>
 												</div>
 												<div>
-												<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Última venta</p>
-												<p className="mt-1 text-sm font-semibold text-slate-900">
-													{productSalesQuery.data?.lastSaleDate
-														? dateFormatter.format(new Date(productSalesQuery.data.lastSaleDate))
-														: "—"}
-												</p>
+													<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Última venta</p>
+													<p className="mt-1 text-sm font-semibold text-slate-900">
+														{productSalesQuery.data?.lastSaleDate
+															? dateFormatter.format(new Date(productSalesQuery.data.lastSaleDate))
+															: "—"}
+													</p>
+												</div>
 											</div>
-										</div>
 
-										<div className="mt-4 overflow-x-auto">
-											<table className="min-w-[620px] w-full text-sm">
-												<thead>
-													<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-														<th className="py-2 pr-3">Fecha</th>
-														<th className="py-2 pr-3">Factura</th>
-														<th className="py-2 pr-3">Cant.</th>
-														<th className="py-2">Subtotal</th>
-													</tr>
-												</thead>
-												<tbody className="divide-y divide-slate-200">
-													{(productSalesQuery.data?.recentLines ?? []).length === 0 ? (
-														<tr>
-															<td colSpan={4} className="py-8 text-center text-sm text-slate-500">
-																<Package size={28} className="mx-auto mb-2 opacity-50" />
-																Sin ventas registradas para este producto.
-															</td>
+											<div className="mt-4 overflow-x-auto">
+												<table className="min-w-[620px] w-full text-sm">
+													<thead>
+														<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+															<th className="py-2 pr-3">Fecha</th>
+															<th className="py-2 pr-3">Factura</th>
+															<th className="py-2 pr-3">Cant.</th>
+															<th className="py-2">Subtotal</th>
 														</tr>
-													) : (
-														(productSalesQuery.data?.recentLines ?? []).map((line) => (
-															<tr key={`${line.id_factura}-${line.fecha_factura}-${line.cantidad}`}>
-																<td className="py-3 pr-3 align-top text-xs text-slate-600">
-																	{dateFormatter.format(new Date(line.fecha_factura))}
+													</thead>
+													<tbody className="divide-y divide-slate-200">
+														{(productSalesQuery.data?.recentLines ?? []).length === 0 ? (
+															<tr>
+																<td colSpan={4} className="py-8 text-center text-sm text-slate-500">
+																	<Package size={28} className="mx-auto mb-2 opacity-50" />
+																	Sin ventas registradas para este producto.
 																</td>
-																<td className="py-3 pr-3 align-top">
-																	<span className="text-xs font-semibold text-slate-800">{line.numero_factura}</span>
-																</td>
-																<td className="py-3 pr-3 align-top text-xs font-semibold text-slate-800">{line.cantidad}</td>
-																<td className="py-3 align-top text-xs font-semibold text-slate-900">{currency.format(line.subtotal)}</td>
 															</tr>
-														))
-													)}
-												</tbody>
-											</table>
-										</div>
-									</>
-								)}
-							</div>
+														) : (
+															(productSalesQuery.data?.recentLines ?? []).map((line) => (
+																<tr key={`${line.id_factura}-${line.fecha_factura}-${line.cantidad}`}>
+																	<td className="py-3 pr-3 align-top text-xs text-slate-600">
+																		{dateFormatter.format(new Date(line.fecha_factura))}
+																	</td>
+																	<td className="py-3 pr-3 align-top">
+																		<span className="text-xs font-semibold text-slate-800">{line.numero_factura}</span>
+																	</td>
+																	<td className="py-3 pr-3 align-top text-xs font-semibold text-slate-800">{line.cantidad}</td>
+																	<td className="py-3 align-top text-xs font-semibold text-slate-900">{currency.format(line.subtotal)}</td>
+																</tr>
+															))
+														)}
+													</tbody>
+												</table>
+											</div>
+										</>
+									)}
+								</div>
 
+							</div>
 						</div>
-					</div>
 					)}
 				</DrawerContent>
 			</Drawer>

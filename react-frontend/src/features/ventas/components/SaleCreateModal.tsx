@@ -55,11 +55,41 @@ const ventaSchema = z.object({
   id_cliente: z.number().int("Cliente inválido").nonnegative("Cliente inválido"),
   observacion: z.string().trim().max(255, "Máximo 255 caracteres").optional().or(z.literal("")),
   forma_pago: z.enum(["CONTADO", "CREDITO"]),
+  creditoConfig: z
+    .object({
+      numero_cuotas: z.string(),
+      fecha_primer_vencimiento: z.string(),
+      dias_entre_cuotas: z.string().optional().default("30"),
+    })
+    .optional(),
   detalle: z.array(detalleSchema).min(1, "Agrega al menos un ítem"),
 }).superRefine((data, ctx) => {
   // Regla de negocio: crédito requiere cliente
   if (data.forma_pago === "CREDITO" && (!data.id_cliente || data.id_cliente === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["id_cliente"], message: "Selecciona un cliente para crédito" })
+  }
+
+  if (data.forma_pago === "CREDITO") {
+    if (!data.creditoConfig) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["creditoConfig"], message: "Configura el crédito" })
+      return
+    }
+
+    const cuotas = toNumberSafe(data.creditoConfig.numero_cuotas)
+    if (!Number.isFinite(cuotas) || cuotas <= 0 || !Number.isInteger(cuotas)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["creditoConfig", "numero_cuotas"], message: "Cuotas mínimas 1" })
+    }
+
+    const fecha = data.creditoConfig.fecha_primer_vencimiento
+    const fechaOk = typeof fecha === "string" && fecha.trim().length > 0 && !Number.isNaN(new Date(fecha).getTime())
+    if (!fechaOk) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["creditoConfig", "fecha_primer_vencimiento"], message: "Fecha inválida" })
+    }
+
+    const dias = toNumberSafe(data.creditoConfig.dias_entre_cuotas ?? "30")
+    if (!Number.isFinite(dias) || dias <= 0 || !Number.isInteger(dias)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["creditoConfig", "dias_entre_cuotas"], message: "Días inválidos" })
+    }
   }
 })
 
@@ -73,16 +103,35 @@ type Props = {
   isAdmin: boolean
 }
 
-const defaultValues: SaleCreateFormValues = {
-  id_cliente: 0,
-  observacion: "",
-  forma_pago: "CONTADO",
-  detalle: [],
+const toIsoDate = (d: Date) => {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+const makeDefaultValues = (): SaleCreateFormValues => {
+  const now = new Date()
+  const in30 = new Date(now)
+  in30.setDate(in30.getDate() + 30)
+
+  return {
+    id_cliente: 0,
+    observacion: "",
+    forma_pago: "CONTADO",
+    creditoConfig: {
+      numero_cuotas: "6",
+      fecha_primer_vencimiento: toIsoDate(in30),
+      dias_entre_cuotas: "30",
+    },
+    detalle: [],
+  }
 }
 
 export function SaleCreateModal({ open, onOpenChange, clientes, productos, clientesLoading }: Props) {
   const queryClient = useQueryClient()
   const autoPrintTimeoutRef = useRef<number | null>(null)
+  const defaultValues = useMemo(() => makeDefaultValues(), [])
 
   const [formError, setFormError] = useState<string | null>(null)
   const [createdSale, setCreatedSale] = useState<import("../../../services/salesService").VentaDetailRecord | null>(null)
@@ -126,6 +175,18 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
   }, [detalleValues, descuentoGeneral])
 
   const buildPayload = (values: SaleCreateFormValues): VentaPayload => {
+    const creditoConfig =
+      values.forma_pago === "CREDITO"
+        ? {
+            numero_cuotas: Math.trunc(toNumberSafe(values.creditoConfig?.numero_cuotas)),
+            fecha_primer_vencimiento: String(values.creditoConfig?.fecha_primer_vencimiento ?? "").trim(),
+            dias_entre_cuotas:
+              values.creditoConfig?.dias_entre_cuotas && String(values.creditoConfig.dias_entre_cuotas).trim().length > 0
+                ? Math.trunc(toNumberSafe(values.creditoConfig.dias_entre_cuotas))
+                : undefined,
+          }
+        : undefined
+
     return {
       id_cliente: values.id_cliente && values.id_cliente !== 0 ? values.id_cliente : null,
       forma_pago: values.forma_pago,
@@ -136,6 +197,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
         precio_unitario: round2(toNumberSafe(item.precio_unitario)),
         descuento: round2(toNumberSafe(item.descuento ?? "0")),
       })),
+      ...(creditoConfig ? { creditoConfig } : {}),
     }
   }
 

@@ -87,7 +87,7 @@ export function ProductsDetailDrawer(props: Props) {
 			const dateB = new Date(b.fecha_movimiento ?? 0).getTime()
 			return dateB - dateA
 		})
-	}, [detailProduct, props.movements.data])
+	}, [props.movements.data])
 
 	const visibleMovements = useMemo(() => {
 		return filteredMovements.slice(0, 7)

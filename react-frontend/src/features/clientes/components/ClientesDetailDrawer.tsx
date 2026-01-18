@@ -1,4 +1,4 @@
-import { Download } from "lucide-react"
+import { Calendar, Download, IdCard, Mail, MapPin, Phone } from "lucide-react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { ClienteRecord } from "../cliente.types"
@@ -21,83 +21,112 @@ type Props = {
 
 export function ClientesDetailDrawer(props: Props) {
 	const detailCliente = props.cliente
-
-	if (!detailCliente) return null
+	const fullName = detailCliente ? getClienteFullName(detailCliente) : ""
+	const initials = detailCliente
+		? `${(detailCliente.nombres ?? "").trim().slice(0, 1)}${(detailCliente.apellidos ?? "").trim().slice(0, 1)}`
+			.toUpperCase()
+			|| "CL"
+		: "CL"
 
 	return (
 		<Drawer open={props.open} onOpenChange={props.onOpenChange}>
-			<DrawerContent className="max-h-[85vh]">
-				<DrawerHeader>
-					<DrawerTitle>{getClienteFullName(detailCliente)}</DrawerTitle>
-					<DrawerDescription>
-						Detalles del cliente y su información de contacto.
-					</DrawerDescription>
-				</DrawerHeader>
+			<DrawerContent className="overflow-hidden">
+				<div className="flex h-dvh flex-col">
+					<DrawerHeader>
+						<DrawerTitle className="pr-10">
+							{detailCliente ? fullName : "Detalle de cliente"}
+						</DrawerTitle>
+						<DrawerDescription>Detalles del cliente y su información de contacto.</DrawerDescription>
 
-				<div className="flex flex-col gap-6 p-6">
-					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-						<div>
-							<label className="text-sm font-medium text-slate-500">Nombres</label>
-							<p className="mt-1 text-sm text-slate-900">{detailCliente.nombres}</p>
+						<div className="mt-4 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={props.onExportPdf}
+								disabled={!detailCliente || Boolean(props.exportDisabled || props.exportingPdf)}
+								className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								<Download className="h-4 w-4" aria-hidden="true" />
+								Exportar PDF
+							</button>
+							<button
+								type="button"
+								onClick={props.onEdit}
+								disabled={!detailCliente}
+								className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+							>
+								Editar
+							</button>
+							<button
+								type="button"
+								onClick={props.onClose}
+								className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+							>
+								Cerrar
+							</button>
 						</div>
-						<div>
-							<label className="text-sm font-medium text-slate-500">Apellidos</label>
-							<p className="mt-1 text-sm text-slate-900">{detailCliente.apellidos}</p>
-						</div>
-						<div>
-							<label className="text-sm font-medium text-slate-500">Cédula</label>
-							<p className="mt-1 text-sm text-slate-900">{detailCliente.cedula}</p>
-						</div>
-						<div>
-							<label className="text-sm font-medium text-slate-500">Fecha de Registro</label>
-							<p className="mt-1 text-sm text-slate-900">
-								{props.dateFormatter.format(new Date(detailCliente.fecha_registro))}
-							</p>
-						</div>
-						<div className="sm:col-span-2">
-							<label className="text-sm font-medium text-slate-500">Correo</label>
-							<p className="mt-1 text-sm text-slate-900">
-								{detailCliente.correo || <span className="text-slate-500">No especificado</span>}
-							</p>
-						</div>
-						<div>
-							<label className="text-sm font-medium text-slate-500">Teléfono</label>
-							<p className="mt-1 text-sm text-slate-900">
-								{detailCliente.telefono || <span className="text-slate-500">No especificado</span>}
-							</p>
-						</div>
-						<div>
-							<label className="text-sm font-medium text-slate-500">Dirección</label>
-							<p className="mt-1 text-sm text-slate-900">
-								{detailCliente.direccion || <span className="text-slate-500">No especificada</span>}
-							</p>
-						</div>
-					</div>
+					</DrawerHeader>
 
-					<div className="flex justify-end gap-3">
-						<button
-							onClick={props.onExportPdf}
-							disabled={Boolean(props.exportDisabled || props.exportingPdf)}
-							className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
-						>
-							<Download className="h-4 w-4" aria-hidden="true" />
-							Exportar PDF
-						</button>
-						<button
-							onClick={props.onClose}
-							className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
-						>
-							Cerrar
-						</button>
-						<button
-							onClick={props.onEdit}
-							className="inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-slate-900 px-3 py-1 text-sm font-medium text-white shadow transition-colors hover:bg-slate-900/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950"
-						>
-							<svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-							</svg>
-							Editar
-						</button>
+					<div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-5">
+						{!detailCliente ? (
+							<div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+								Selecciona un cliente para ver el detalle.
+							</div>
+						) : (
+							<div className="space-y-5">
+								<div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+									<div className="flex flex-wrap items-start justify-between gap-3">
+										<div className="flex items-start gap-3">
+											<div className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">
+												{initials}
+											</div>
+											<div>
+												<p className="text-base font-semibold text-slate-900">{fullName}</p>
+												<div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+													<span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 ring-1 ring-slate-200">
+														<IdCard className="h-3.5 w-3.5" />
+														{detailCliente.cedula}
+													</span>
+													<span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 ring-1 ring-slate-200">
+														<Calendar className="h-3.5 w-3.5" />
+														Registrado: {props.dateFormatter.format(new Date(detailCliente.fecha_registro))}
+													</span>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+
+								<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+									<div className="rounded-2xl border border-slate-200 bg-white p-4">
+										<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contacto</p>
+										<div className="mt-3 space-y-3 text-sm">
+											<div className="flex items-start gap-2">
+												<Mail className="mt-0.5 h-4 w-4 text-slate-400" />
+												<div>
+													<p className="font-semibold text-slate-900">Correo</p>
+													<p className="text-slate-600">{detailCliente.correo?.trim() ? detailCliente.correo : "No especificado"}</p>
+												</div>
+											</div>
+											<div className="flex items-start gap-2">
+												<Phone className="mt-0.5 h-4 w-4 text-slate-400" />
+												<div>
+													<p className="font-semibold text-slate-900">Teléfono</p>
+													<p className="text-slate-600">{detailCliente.telefono?.trim() ? detailCliente.telefono : "No especificado"}</p>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<div className="rounded-2xl border border-slate-200 bg-white p-4">
+										<p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dirección</p>
+										<div className="mt-3 flex items-start gap-2 text-sm">
+											<MapPin className="mt-0.5 h-4 w-4 text-slate-400" />
+											<p className="text-slate-600">{detailCliente.direccion?.trim() ? detailCliente.direccion : "No especificada"}</p>
+										</div>
+									</div>
+								</div>
+							</div>
+						)}
 					</div>
 				</div>
 			</DrawerContent>

@@ -7,6 +7,7 @@ CREATE TABLE "cliente" (
     "correo" VARCHAR(120),
     "telefono" VARCHAR(20),
     "direccion" VARCHAR(150),
+    "fecha_nacimiento" DATE,
     "fecha_registro" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "id_estado" INTEGER NOT NULL DEFAULT 1,
     "id_usuario_modifi" INTEGER,
@@ -36,6 +37,7 @@ CREATE TABLE "credito" (
     "id_factura" INTEGER NOT NULL,
     "monto_total" DECIMAL(12,2) NOT NULL,
     "saldo_pendiente" DECIMAL(12,2) NOT NULL,
+    "estado_credito" VARCHAR(20) NOT NULL DEFAULT 'ACTIVO',
     "fecha_inicio" DATE NOT NULL,
     "fecha_fin" DATE,
     "id_estado" INTEGER NOT NULL DEFAULT 1,
@@ -57,6 +59,22 @@ CREATE TABLE "cuota" (
     "id_usuario_modifi" INTEGER,
 
     CONSTRAINT "cuota_pkey" PRIMARY KEY ("id_cuota")
+);
+
+-- CreateTable
+CREATE TABLE "movimiento_credito" (
+    "id_movimiento_credito" SERIAL NOT NULL,
+    "id_credito" INTEGER NOT NULL,
+    "id_cuota" INTEGER NOT NULL,
+    "fecha" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "tipo" VARCHAR(20) NOT NULL DEFAULT 'PAGO',
+    "monto" DECIMAL(12,2) NOT NULL,
+    "metodo" VARCHAR(30) NOT NULL,
+    "referencia" VARCHAR(100),
+    "nota" VARCHAR(255),
+    "id_usuario" INTEGER NOT NULL,
+
+    CONSTRAINT "movimiento_credito_pkey" PRIMARY KEY ("id_movimiento_credito")
 );
 
 -- CreateTable
@@ -164,13 +182,29 @@ CREATE TABLE "usuario" (
     "telefono" VARCHAR(20),
     "direccion" VARCHAR(150),
     "cedula" VARCHAR(10),
+    "fecha_nacimiento" DATE,
     "rol" VARCHAR(30) NOT NULL DEFAULT 'VENDEDOR',
     "password_hash" VARCHAR(255) NOT NULL,
+    "activo" BOOLEAN NOT NULL DEFAULT true,
     "fecha_creacion" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "last_login" TIMESTAMP(3),
+    "intentos_fallidos" INTEGER NOT NULL DEFAULT 0,
+    "bloqueado" BOOLEAN NOT NULL DEFAULT false,
     "id_estado" INTEGER NOT NULL DEFAULT 1,
     "id_usuario_modifi" INTEGER,
 
     CONSTRAINT "usuario_pkey" PRIMARY KEY ("id_usuario")
+);
+
+-- CreateTable
+CREATE TABLE "usuario_auditoria" (
+    "id_auditoria" SERIAL NOT NULL,
+    "id_usuario" INTEGER NOT NULL,
+    "evento" VARCHAR(50) NOT NULL,
+    "descripcion" VARCHAR(255),
+    "fecha_evento" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "usuario_auditoria_pkey" PRIMARY KEY ("id_auditoria")
 );
 
 -- CreateTable
@@ -187,6 +221,15 @@ CREATE UNIQUE INDEX "cliente_cedula_key" ON "cliente"("cedula");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ux_cuota_unica" ON "cuota"("id_credito", "numero_cuota");
+
+-- CreateIndex
+CREATE INDEX "ix_mov_credito_credito" ON "movimiento_credito"("id_credito");
+
+-- CreateIndex
+CREATE INDEX "ix_mov_credito_cuota" ON "movimiento_credito"("id_cuota");
+
+-- CreateIndex
+CREATE INDEX "ix_mov_credito_fecha" ON "movimiento_credito"("fecha");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ux_detalle_factura_unico" ON "detalle_factura"("id_factura", "id_producto");
@@ -208,6 +251,24 @@ CREATE UNIQUE INDEX "usuario_correo_key" ON "usuario"("correo");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "usuario_cedula_key" ON "usuario"("cedula");
+
+-- CreateIndex
+CREATE INDEX "ix_usuario_correo" ON "usuario"("correo");
+
+-- CreateIndex
+CREATE INDEX "ix_usuario_rol" ON "usuario"("rol");
+
+-- CreateIndex
+CREATE INDEX "ix_usuario_activo" ON "usuario"("activo");
+
+-- CreateIndex
+CREATE INDEX "ix_usuario_bloqueado" ON "usuario"("bloqueado");
+
+-- CreateIndex
+CREATE INDEX "ix_auditoria_usuario" ON "usuario_auditoria"("id_usuario");
+
+-- CreateIndex
+CREATE INDEX "ix_auditoria_evento" ON "usuario_auditoria"("evento");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "estado_registro_nombre_estado_key" ON "estado_registro"("nombre_estado");
@@ -246,16 +307,25 @@ ALTER TABLE "cuota" ADD CONSTRAINT "fk_cuota_credito" FOREIGN KEY ("id_credito")
 ALTER TABLE "cuota" ADD CONSTRAINT "fk_cuota_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_factura_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE "movimiento_credito" ADD CONSTRAINT "fk_mov_credito_credito" FOREIGN KEY ("id_credito") REFERENCES "credito"("id_credito") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "movimiento_credito" ADD CONSTRAINT "fk_mov_credito_cuota" FOREIGN KEY ("id_cuota") REFERENCES "cuota"("id_cuota") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "movimiento_credito" ADD CONSTRAINT "fk_mov_credito_usuario" FOREIGN KEY ("id_usuario") REFERENCES "usuario"("id_usuario") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_factura" FOREIGN KEY ("id_factura") REFERENCES "factura"("id_factura") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_factura_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_factura_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "detalle_factura" ADD CONSTRAINT "fk_detalle_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "factura" ADD CONSTRAINT "fk_factura_cliente" FOREIGN KEY ("id_cliente") REFERENCES "cliente"("id_cliente") ON DELETE NO ACTION ON UPDATE NO ACTION;
@@ -273,10 +343,10 @@ ALTER TABLE "factura" ADD CONSTRAINT "fk_factura_usuario_modifi" FOREIGN KEY ("i
 ALTER TABLE "kardex" ADD CONSTRAINT "fk_kardex_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "kardex" ADD CONSTRAINT "fk_kx_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE "kardex" ADD CONSTRAINT "fk_kardex_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "kardex" ADD CONSTRAINT "fk_kardex_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
+ALTER TABLE "kardex" ADD CONSTRAINT "fk_kx_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "producto" ADD CONSTRAINT "fk_producto_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
@@ -291,10 +361,10 @@ ALTER TABLE "producto" ADD CONSTRAINT "fk_producto_usuario_modifi" FOREIGN KEY (
 ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_pc_compra" FOREIGN KEY ("id_compra") REFERENCES "compra"("id_compra") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_producto_compra_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_pc_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_pc_producto" FOREIGN KEY ("id_producto") REFERENCES "producto"("id_producto") ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_producto_compra_estado" FOREIGN KEY ("id_estado") REFERENCES "estado_registro"("id_estado") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
 ALTER TABLE "producto_compra" ADD CONSTRAINT "fk_producto_compra_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
@@ -310,3 +380,6 @@ ALTER TABLE "usuario" ADD CONSTRAINT "fk_usuario_estado" FOREIGN KEY ("id_estado
 
 -- AddForeignKey
 ALTER TABLE "usuario" ADD CONSTRAINT "fk_usuario_usuario_modifi" FOREIGN KEY ("id_usuario_modifi") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE NO ACTION;
+
+-- AddForeignKey
+ALTER TABLE "usuario_auditoria" ADD CONSTRAINT "usuario_auditoria_id_usuario_fkey" FOREIGN KEY ("id_usuario") REFERENCES "usuario"("id_usuario") ON DELETE CASCADE ON UPDATE CASCADE;

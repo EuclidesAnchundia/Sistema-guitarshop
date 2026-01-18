@@ -21,7 +21,11 @@ export type SaleCreateFormValues = {
   observacion?: string
   forma_pago: "CONTADO" | "CREDITO"
   detalle: SaleCreateLineForm[]
-  creditoConfig?: unknown
+  creditoConfig?: {
+    numero_cuotas: string
+    fecha_primer_vencimiento: string
+    dias_entre_cuotas?: string
+  }
 }
 
 type Props = {

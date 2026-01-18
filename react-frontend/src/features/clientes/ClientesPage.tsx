@@ -111,6 +111,9 @@ const [createDialogOpen, setCreateDialogOpen] = useState(false)
 const [editDialogOpen, setEditDialogOpen] = useState(false)
 const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
 
+const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+const [deleteTarget, setDeleteTarget] = useState<ClienteRecord | null>(null)
+
 	const [exportingKey, setExportingKey] = useState<string | null>(null)
 
 const [selectedCliente, setSelectedCliente] = useState<ClienteRecord | null>(null)
@@ -124,19 +127,31 @@ const clientes = useMemo(() => clientesQuery.data ?? [], [clientesQuery.data])
 const form = useForm<ClienteFormValues>({
 resolver: zodResolver(clienteSchema),
 defaultValues,
+mode: "onChange",
 })
 
 const editForm = useForm<ClienteFormValues>({
 resolver: zodResolver(clienteSchema),
 defaultValues,
+mode: "onChange",
 })
+
+const closeCreateDialog = () => {
+setCreateDialogOpen(false)
+form.reset(defaultValues)
+}
+
+const closeEditDialog = () => {
+setEditDialogOpen(false)
+setEditingCliente(null)
+editForm.reset(defaultValues)
+}
 
 const createMutation = useMutation({
 mutationFn: (payload: ClientePayload) => clienteClient.create(payload),
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: clientesQueryKey })
-setCreateDialogOpen(false)
-form.reset(defaultValues)
+closeCreateDialog()
 },
 })
 
@@ -144,9 +159,7 @@ const updateMutation = useMutation({
 mutationFn: ({ id, payload }: { id: number; payload: ClientePayload }) => clienteClient.update(id, payload),
 onSuccess: () => {
 queryClient.invalidateQueries({ queryKey: clientesQueryKey })
-setEditDialogOpen(false)
-setEditingCliente(null)
-editForm.reset(defaultValues)
+closeEditDialog()
 },
 })
 
@@ -285,9 +298,9 @@ updateMutation.mutate({ id: editingCliente.id_cliente, payload })
 
 const handleDelete = useCallback(
 (cliente: ClienteRecord) => {
-if (confirm(`¿Estás seguro de eliminar al cliente ${cliente.nombres} ${cliente.apellidos}?`)) {
-deleteMutation.mutate(cliente.id_cliente)
-}
+if (deleteMutation.isPending) return
+setDeleteTarget(cliente)
+setDeleteConfirmOpen(true)
 },
 [deleteMutation]
 )
@@ -308,6 +321,7 @@ correo: cliente.correo || "",
 telefono: cliente.telefono || "",
 direccion: cliente.direccion || "",
 })
+		void editForm.trigger()
 setEditDialogOpen(true)
 },
 [editForm]
@@ -575,6 +589,50 @@ className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-se
 </div>
 </section>
 
+{deleteConfirmOpen && deleteTarget && (
+<div
+className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+role="dialog"
+aria-modal="true"
+aria-label="Eliminar cliente"
+>
+<div className="w-full max-w-md rounded-2xl bg-white p-6">
+<h3 className="text-lg font-semibold text-slate-900">Eliminar cliente</h3>
+<p className="mt-2 text-sm text-slate-600">
+Esta acción no se puede deshacer. ¿Deseas eliminar al cliente {deleteTarget.nombres} {deleteTarget.apellidos}?
+</p>
+
+<div className="mt-6 flex justify-end gap-2">
+<button
+type="button"
+onClick={() => {
+if (deleteMutation.isPending) return
+setDeleteConfirmOpen(false)
+setDeleteTarget(null)
+}}
+className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+disabled={deleteMutation.isPending}
+>
+Cancelar
+</button>
+<button
+type="button"
+onClick={() => {
+deleteMutation.mutate(deleteTarget.id_cliente)
+setDeleteConfirmOpen(false)
+setDeleteTarget(null)
+}}
+className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+disabled={deleteMutation.isPending}
+>
+{deleteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+Eliminar
+</button>
+</div>
+</div>
+</div>
+)}
+
 <ClientesFiltersDrawer
 open={filtersDrawerOpen}
 onOpenChange={setFiltersDrawerOpen}
@@ -608,27 +666,31 @@ onClose={() => setDetailDrawerOpen(false)}
 <Dialog
 open={createDialogOpen}
 onOpenChange={(open) => {
-if (!open) {
-setCreateDialogOpen(false)
-form.reset(defaultValues)
-} else {
+if (!open) return
 setCreateDialogOpen(true)
-}
 }}
 >
-<DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-0 sm:rounded-3xl">
+<DialogContent
+className="w-full max-w-5xl overflow-hidden p-0 sm:rounded-3xl"
+disableOutsideClose
+hideCloseButton
+>
+<div className="flex h-[90vh] flex-col">
 <DialogHeader className="border-b px-8 py-6 text-left">
 <DialogTitle className="text-2xl font-semibold text-slate-900">Registrar cliente</DialogTitle>
 <DialogDescription>Agrega un nuevo cliente al sistema.</DialogDescription>
 </DialogHeader>
-<div className="px-8 py-6">
+
+<form onSubmit={form.handleSubmit(handleCreate)} className="flex flex-1 flex-col overflow-hidden">
+<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
 {createMutation.isError && (
-<div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
 {getApiErrorMessage(createMutation.error, "No se pudo registrar el cliente")}
 </div>
 )}
-<form onSubmit={form.handleSubmit(handleCreate)} className="space-y-6">
-<div className="grid grid-cols-2 gap-4">
+
+<div className="grid gap-6 lg:grid-cols-2">
+<div className="space-y-6">
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nombres</label>
 <input
@@ -639,6 +701,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.nombres.message}</p>
 )}
 </div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Apellidos</label>
 <input
@@ -649,7 +712,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.apellidos.message}</p>
 )}
 </div>
-</div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Cédula</label>
 <input
@@ -660,6 +723,9 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.cedula.message}</p>
 )}
 </div>
+</div>
+
+<div className="space-y-6">
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Correo</label>
 <input
@@ -671,6 +737,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.correo.message}</p>
 )}
 </div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Teléfono</label>
 <input
@@ -681,29 +748,35 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.telefono.message}</p>
 )}
 </div>
+</div>
+</div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Dirección</label>
 <textarea
 {...form.register("direccion")}
-rows={3}
+rows={4}
 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 />
 {form.formState.errors.direccion && (
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.direccion.message}</p>
 )}
 </div>
-<div className="flex justify-end gap-3">
+</div>
+
+<div className="flex items-center justify-end gap-3 border-t bg-white px-8 py-5">
 <button
 type="button"
-onClick={() => setCreateDialogOpen(false)}
-className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+onClick={closeCreateDialog}
+disabled={createMutation.isPending}
+className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
 >
 Cancelar
 </button>
 <button
 type="submit"
-disabled={createMutation.isPending}
-className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+					disabled={createMutation.isPending || !form.formState.isValid}
+					className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
 >
 {createMutation.isPending && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
 Crear Cliente
@@ -717,28 +790,31 @@ Crear Cliente
 <Dialog
 open={editDialogOpen}
 onOpenChange={(open) => {
-if (!open) {
-setEditDialogOpen(false)
-setEditingCliente(null)
-editForm.reset(defaultValues)
-} else {
+if (!open) return
 setEditDialogOpen(true)
-}
 }}
 >
-<DialogContent className="w-full max-w-md max-h-[90vh] overflow-y-auto p-0 sm:rounded-3xl">
+<DialogContent
+className="w-full max-w-5xl overflow-hidden p-0 sm:rounded-3xl"
+disableOutsideClose
+hideCloseButton
+>
+<div className="flex h-[90vh] flex-col">
 <DialogHeader className="border-b px-8 py-6 text-left">
 <DialogTitle className="text-2xl font-semibold text-slate-900">Editar cliente</DialogTitle>
 <DialogDescription>Modifica la información del cliente.</DialogDescription>
 </DialogHeader>
-<div className="px-8 py-6">
+
+<form onSubmit={editForm.handleSubmit(handleEdit)} className="flex flex-1 flex-col overflow-hidden">
+<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
 {updateMutation.isError && (
-<div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+<div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
 {getApiErrorMessage(updateMutation.error, "No se pudo actualizar el cliente")}
 </div>
 )}
-<form onSubmit={editForm.handleSubmit(handleEdit)} className="space-y-6">
-<div className="grid grid-cols-2 gap-4">
+
+<div className="grid gap-6 lg:grid-cols-2">
+<div className="space-y-6">
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Nombres</label>
 <input
@@ -749,6 +825,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.nombres.message}</p>
 )}
 </div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Apellidos</label>
 <input
@@ -759,7 +836,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.apellidos.message}</p>
 )}
 </div>
-</div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Cédula</label>
 <input
@@ -770,6 +847,9 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.cedula.message}</p>
 )}
 </div>
+</div>
+
+<div className="space-y-6">
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Correo</label>
 <input
@@ -781,6 +861,7 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.correo.message}</p>
 )}
 </div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Teléfono</label>
 <input
@@ -791,29 +872,35 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.telefono.message}</p>
 )}
 </div>
+</div>
+</div>
+
 <div>
 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Dirección</label>
 <textarea
 {...editForm.register("direccion")}
-rows={3}
+rows={4}
 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 />
 {editForm.formState.errors.direccion && (
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.direccion.message}</p>
 )}
 </div>
-<div className="flex justify-end gap-3">
+</div>
+
+<div className="flex items-center justify-end gap-3 border-t bg-white px-8 py-5">
 <button
 type="button"
-onClick={() => setEditDialogOpen(false)}
-className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+onClick={closeEditDialog}
+disabled={updateMutation.isPending}
+className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:opacity-50"
 >
 Cancelar
 </button>
 <button
 type="submit"
-disabled={updateMutation.isPending}
-className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+					disabled={updateMutation.isPending || !editForm.formState.isValid}
+					className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
 >
 {updateMutation.isPending && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
 Guardar Cambios

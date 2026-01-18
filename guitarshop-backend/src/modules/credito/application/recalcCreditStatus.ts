@@ -2,7 +2,7 @@ import prisma from "../../../shared/prisma/prismaClient";
 import { Prisma } from "../../../../generated/prisma/client";
 
 export type CreditStatus = "ACTIVO" | "EN_MORA" | "CANCELADO";
-export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA";
+export type InstallmentStatus = "PENDIENTE" | "PARCIAL" | "PAGADO" | "VENCIDO";
 
 function dateOnlyUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -33,7 +33,7 @@ function isPaid(installment: {
   monto_pagado: AmountLike;
 }): boolean {
   if (installment.fecha_pago) return true;
-  if (installment.estado_cuota === "PAGADA") return true;
+  if (installment.estado_cuota === "PAGADO") return true;
   const montoCuota = toNumberOrZero(installment.monto_cuota);
   const montoPagado = toNumberOrZero(installment.monto_pagado);
   return Number.isFinite(montoCuota) && Number.isFinite(montoPagado) && montoPagado >= montoCuota;
@@ -44,8 +44,8 @@ function computeInstallmentStatus(params: {
   paid: boolean;
   todayUtc: Date;
 }): InstallmentStatus {
-  if (params.paid) return "PAGADA";
-  return dateOnlyUtc(params.dueDate).getTime() < params.todayUtc.getTime() ? "VENCIDA" : "PENDIENTE";
+  if (params.paid) return "PAGADO";
+  return dateOnlyUtc(params.dueDate).getTime() < params.todayUtc.getTime() ? "VENCIDO" : "PENDIENTE";
 }
 
 function computeCreditStatus(params: {
@@ -96,7 +96,7 @@ export async function recalcCreditStatus(id_credito: number, tx?: Prisma.Transac
       todayUtc,
     });
 
-    if (!paid && newEstado === "VENCIDA") {
+    if (!paid && newEstado === "VENCIDO") {
       hasOverdueUnpaid = true;
     }
 

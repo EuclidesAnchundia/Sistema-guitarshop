@@ -1,5 +1,5 @@
 import prisma from "../prisma";
-import { exportTableToCsv, exportTableToPdf, exportTableToXlsx, makeExportFilename, type ExportScope, type ExportFormat, type TableColumn } from "../../src/shared/export/tableExport";
+import { exportSaleInvoiceToPdf, exportTableToCsv, exportTableToPdf, exportTableToXlsx, makeExportFilename, type ExportScope, type ExportFormat, type TableColumn } from "../../src/shared/export/tableExport";
 import { obtenerVentaPorId } from "./facturaService";
 
 export type VentasExportQuery = {
@@ -23,7 +23,7 @@ type VentaRow = {
 
 const columns: TableColumn<VentaRow>[] = [
   { header: "Factura", widthWeight: 1.0, value: (r) => r.numero_factura },
-  { header: "Fecha", widthWeight: 1.2, value: (r) => r.fecha_factura?.toISOString?.() ?? r.fecha_factura },
+  { header: "Fecha", widthWeight: 1.2, value: (r) => r.fecha_factura },
   { header: "Cliente", widthWeight: 1.8, value: (r) => r.cliente },
   { header: "Forma pago", widthWeight: 1.0, value: (r) => r.forma_pago },
   { header: "Total", align: "right", widthWeight: 1.0, value: (r) => r.total },
@@ -100,47 +100,31 @@ export async function exportVentasFile(query: VentasExportQuery): Promise<{ buff
   return { buffer, contentType: "application/pdf", filename };
 }
 
-type VentaItemRow = {
-  codigo_producto: string;
-  nombre_producto: string;
-  cantidad: number;
-  precio_unitario: number;
-  descuento: number;
-  subtotal: number;
-};
-
-const itemColumns: TableColumn<VentaItemRow>[] = [
-  { header: "Código", widthWeight: 1.0, value: (r) => r.codigo_producto },
-  { header: "Producto", widthWeight: 2.4, value: (r) => r.nombre_producto },
-  { header: "Cant.", align: "right", widthWeight: 0.8, value: (r) => r.cantidad },
-  { header: "Precio", align: "right", widthWeight: 0.9, value: (r) => r.precio_unitario },
-  { header: "Desc.", align: "right", widthWeight: 0.8, value: (r) => r.descuento },
-  { header: "Subtotal", align: "right", widthWeight: 1.0, value: (r) => r.subtotal },
-];
-
 export async function exportSingleVentaPdf(ventaId: number): Promise<{ buffer: Buffer; filename: string }> {
   const id = Number(ventaId);
   const venta = await obtenerVentaPorId(id);
   if (!venta) throw new Error("NOT_FOUND");
 
-  const cliente = venta.cliente ? `${venta.cliente.nombres} ${venta.cliente.apellidos}` : "Consumidor final";
-  const fecha = venta.fecha_factura ? new Date(venta.fecha_factura).toLocaleString("es-EC") : "—";
-  const total = Number(venta.total ?? 0);
-
-  const rows: VentaItemRow[] = (venta.detalle_factura ?? []).map((it) => ({
-    codigo_producto: it.producto?.codigo_producto ?? "—",
-    nombre_producto: it.producto?.nombre_producto ?? "—",
-    cantidad: Number(it.cantidad ?? 0),
-    precio_unitario: Number(it.precio_unitario ?? 0),
-    descuento: Number(it.descuento ?? 0),
-    subtotal: Number(it.subtotal ?? 0),
-  }));
-
-  const buffer = await exportTableToPdf({
-    title: `Factura ${venta.numero_factura}`,
-    subtitle: `Cliente: ${cliente} · Fecha: ${fecha} · Total: ${total} · Forma: ${String(venta.forma_pago ?? "")}`,
-    rows,
-    columns: itemColumns,
+  const buffer = await exportSaleInvoiceToPdf({
+    sale: {
+      numero_factura: venta.numero_factura,
+      fecha_factura: venta.fecha_factura,
+      forma_pago: venta.forma_pago,
+      subtotal: Number(venta.subtotal ?? 0),
+      impuesto: Number(venta.impuesto ?? 0),
+      total: Number(venta.total ?? 0),
+      cliente: venta.cliente,
+      usuario: venta.usuario,
+      detalle_factura: (venta.detalle_factura ?? []).map((d) => ({
+        id_detalle_factura: d.id_detalle_factura,
+        id_producto: d.id_producto,
+        cantidad: d.cantidad,
+        precio_unitario: Number(d.precio_unitario ?? 0),
+        descuento: Number(d.descuento ?? 0),
+        subtotal: Number(d.subtotal ?? 0),
+        producto: d.producto,
+      })),
+    },
   });
 
   return { buffer, filename: `venta_${venta.numero_factura}.pdf` };
