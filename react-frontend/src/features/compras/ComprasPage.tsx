@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { api } from "../../lib/apiClient"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { ComprasListHeader } from "./components/ComprasListHeader"
+import type { ComprasFilterChip } from "./components/ComprasListHeader"
 import { ComprasFiltersDrawer, type ComprasFiltersDraft } from "./components/ComprasFiltersDrawer"
 import { ComprasDetailDrawer } from "./components/ComprasDetailDrawer"
 
@@ -44,6 +45,7 @@ type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
 const DEFAULT_PAGE_SIZE: PageSizeOption = 20
 
 const defaultFiltersDraft: ComprasFiltersDraft = {
+  orden: "date_desc",
   fechaDesde: "",
   fechaHasta: "",
   proveedor: "",
@@ -494,7 +496,26 @@ export default function ComprasPage() {
 			}
     }
 
-    return filtered
+      // Aplicar ordenamiento
+      filtered = filtered.slice()
+      switch (filters.orden) {
+        case "date_asc":
+          filtered.sort((a, b) => (a.fecha_compra ? new Date(a.fecha_compra).getTime() : 0) - (b.fecha_compra ? new Date(b.fecha_compra).getTime() : 0))
+          break
+        case "date_desc":
+          filtered.sort((a, b) => (b.fecha_compra ? new Date(b.fecha_compra).getTime() : 0) - (a.fecha_compra ? new Date(a.fecha_compra).getTime() : 0))
+          break
+        case "total_asc":
+          filtered.sort((a, b) => (a.total ?? 0) - (b.total ?? 0))
+          break
+        case "total_desc":
+          filtered.sort((a, b) => (b.total ?? 0) - (a.total ?? 0))
+          break
+        default:
+          break
+      }
+
+      return filtered
   }, [compras, searchInput, filters])
 
   // Paginación
@@ -516,12 +537,12 @@ export default function ComprasPage() {
 
   // Chips de filtros activos
   const filterChips = useMemo(() => {
-    const chips = [] as Array<{ key: keyof ComprasFiltersDraft; label: string }>
-		if (filters.fechaDesde) chips.push({ key: "fechaDesde", label: `Desde: ${filters.fechaDesde}` })
-		if (filters.fechaHasta) chips.push({ key: "fechaHasta", label: `Hasta: ${filters.fechaHasta}` })
-		if (filters.proveedor) chips.push({ key: "proveedor", label: `Proveedor: ${filters.proveedor}` })
-		if (filters.totalMin) chips.push({ key: "totalMin", label: `Total min: $${filters.totalMin}` })
-		if (filters.totalMax) chips.push({ key: "totalMax", label: `Total max: $${filters.totalMax}` })
+    const chips = [] as ComprasFilterChip[]
+    if (filters.fechaDesde) chips.push({ key: "fechaDesde", label: `Desde: ${filters.fechaDesde}` })
+    if (filters.fechaHasta) chips.push({ key: "fechaHasta", label: `Hasta: ${filters.fechaHasta}` })
+    if (filters.proveedor) chips.push({ key: "proveedor", label: `Proveedor: ${filters.proveedor}` })
+    if (filters.totalMin) chips.push({ key: "totalMin", label: `Total min: $${filters.totalMin}` })
+    if (filters.totalMax) chips.push({ key: "totalMax", label: `Total max: $${filters.totalMax}` })
     return chips
   }, [filters])
 
@@ -845,50 +866,6 @@ export default function ComprasPage() {
               </tbody>
             </table>
           </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
-            <div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                disabled={currentPage <= 1}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Anterior
-              </button>
-              <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
-                {currentPage}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentPage >= totalPages}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Siguiente
-              </button>
-            </div>
-
-            <div className="inline-flex items-center gap-3">
-              <label htmlFor="compras-page-size-bottom" className="text-sm font-semibold text-slate-800">
-                Por página
-              </label>
-              <select
-                id="compras-page-size-bottom"
-                value={String(pageSize)}
-                onChange={(event) => handleChangePageSize(Number(event.target.value) as PageSizeOption)}
-                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              >
-                {PAGE_SIZE_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
         </div>
 
         {comprasQuery.isLoading && (
@@ -902,19 +879,52 @@ export default function ComprasPage() {
           <div className="p-8 text-center text-slate-500">
             <ClipboardList size={36} className="mx-auto mb-2 opacity-50" />
             <p>{filteredCompras.length === 0 ? "No hay compras registradas." : "No se encontraron compras con los filtros aplicados."}</p>
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={openCreate}
-                disabled={disableCreate}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva compra
-              </button>
-            </div>
           </div>
         )}
+
+        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 bg-white px-6 py-5">
+          <div className="text-sm font-medium text-slate-600">Página {currentPage} de {totalPages}</div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage <= 1}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Anterior
+            </button>
+            <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">
+              {currentPage}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage >= totalPages}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Siguiente
+            </button>
+          </div>
+
+          <div className="inline-flex items-center gap-3">
+            <label htmlFor="compras-page-size-bottom" className="text-sm font-semibold text-slate-800">
+              Por página
+            </label>
+            <select
+              id="compras-page-size-bottom"
+              value={String(pageSize)}
+              onChange={(event) => handleChangePageSize(Number(event.target.value) as PageSizeOption)}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            >
+              {PAGE_SIZE_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </section>
 
       {dialogOpen && (

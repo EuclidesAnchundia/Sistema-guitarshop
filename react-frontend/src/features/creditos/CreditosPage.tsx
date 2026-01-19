@@ -35,7 +35,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-EC", {
 
 const creditStatusClasses: Record<CreditStatus, string> = {
   ACTIVO: "bg-emerald-50 text-emerald-700",
-  EN_MORA: "bg-red-50 text-red-700",
+  VENCIDOS: "bg-red-50 text-red-700",
   CANCELADO: "bg-slate-100 text-slate-700",
 }
 
@@ -64,6 +64,17 @@ function formatDate(iso: string): string {
 	return dateFormatter.format(parsed)
 }
 
+function getCreatedAtTs(item: CreditListItem): number {
+  const record = item as unknown as Record<string, unknown>
+  const raw = (record.createdAt ?? record.created_at ?? record.fecha ?? null) as unknown
+  if (typeof raw === "string") {
+    const d = new Date(raw)
+    return Number.isNaN(d.getTime()) ? 0 : d.getTime()
+  }
+  if (typeof raw === "number") return raw
+  return 0
+}
+
 const buildPagoSchema = (expectedAmount: number) =>
 	z.object({
 		amount: z
@@ -86,7 +97,7 @@ export default function CreditosPage() {
 	const [searchInput, setSearchInput] = useState("")
 	const listadoRef = useRef<HTMLDivElement | null>(null)
 	const searchInputRef = useRef<HTMLInputElement | null>(null)
-  const defaultFilters = useMemo<CreditsFilters>(() => ({ status: "all", soloVencidas: false }), [])
+  const defaultFilters = useMemo<CreditsFilters>(() => ({ status: "all", soloVencidas: false, orden: "date_desc" }), [])
   const [filters, setFilters] = useState<CreditsFilters>(defaultFilters)
   const [filtersDraft, setFiltersDraft] = useState<CreditsFilters>(defaultFilters)
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false)
@@ -133,18 +144,7 @@ export default function CreditosPage() {
   const activos = useMemo(() => creditos.filter((c) => c.saldoPendiente > 0.0001).length, [creditos])
   const saldoPendienteTotal = useMemo(() => creditos.reduce((acc, c) => acc + c.saldoPendiente, 0), [creditos])
 
-  const proximasCuotas = useMemo(() => {
-		const rows = creditos
-			.filter((c) => c.nextInstallment)
-			.map((c) => ({
-				creditId: c.id,
-				saleCode: c.sale.code,
-				clienteLabel: `${c.cliente.nombres} ${c.cliente.apellidos}`,
-				installment: c.nextInstallment as NonNullable<CreditListItem["nextInstallment"]>,
-			}))
-		rows.sort((a, b) => new Date(a.installment.dueDate).getTime() - new Date(b.installment.dueDate).getTime())
-		return rows.slice(0, 4)
-	}, [creditos])
+  // `proximasCuotas` removed: widget moved to Dashboard to avoid duplication.
 
   const normalizedSearch = useMemo(() => searchInput.trim().toLowerCase(), [searchInput])
 
@@ -165,7 +165,7 @@ export default function CreditosPage() {
   }, [filters])
 
   const filteredCreditos = useMemo(() => {
-    return creditos.filter((credito) => {
+    const matched = creditos.filter((credito) => {
       if (filters.status !== "all" && credito.status !== filters.status) return false
       if (filters.soloVencidas && !creditHasOverdue(credito)) return false
 
@@ -175,6 +175,24 @@ export default function CreditosPage() {
       const cedula = (credito.cliente.cedula ?? "").toLowerCase()
       return factura.includes(normalizedSearch) || clienteNombre.includes(normalizedSearch) || cedula.includes(normalizedSearch)
     })
+
+    // aplicar orden
+    matched.sort((a, b) => {
+      switch (filters.orden) {
+        case "date_asc":
+          return getCreatedAtTs(a) - getCreatedAtTs(b)
+        case "date_desc":
+          return getCreatedAtTs(b) - getCreatedAtTs(a)
+        case "amount_asc":
+          return (a.saldoPendiente ?? 0) - (b.saldoPendiente ?? 0)
+        case "amount_desc":
+          return (b.saldoPendiente ?? 0) - (a.saldoPendiente ?? 0)
+        default:
+          return 0
+      }
+    })
+
+    return matched
   }, [creditos, normalizedSearch, filters, creditHasOverdue])
 
   const startItem = filteredCreditos.length === 0 ? 0 : 1
@@ -382,7 +400,7 @@ export default function CreditosPage() {
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div ref={listadoRef} className="col-span-12 lg:col-span-8">
+        <div ref={listadoRef} className="col-span-12 lg:col-span-12">
           <section aria-labelledby="creditos-listado" className="rounded-2xl border border-slate-200 bg-white">
             <CreditsListHeader
               startItem={startItem}
@@ -532,37 +550,7 @@ export default function CreditosPage() {
         </section>
       </div>
 
-      <aside className="col-span-12 lg:col-span-4">
-        <section className="rounded-2xl border border-slate-200 bg-white">
-          <div className="px-6 py-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cobros</p>
-                <p className="mt-1 text-base font-semibold text-slate-900">Vencimientos próximos</p>
-                <p className="text-xs text-slate-500">Agenda tu seguimiento antes de que entren en mora.</p>
-              </div>
-              <Clock className="h-5 w-5 text-slate-400" />
-            </div>
-
-            <div className="mt-4">
-              {proximasCuotas.length === 0 ? (
-                <p className="text-sm text-slate-500">No hay vencimientos cercanos.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {proximasCuotas.map((row) => (
-                    <li key={row.installment.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-                      <p className="font-semibold text-slate-900">{row.saleCode}</p>
-                      <p className="mt-1 text-xs text-slate-600">{row.clienteLabel}</p>
-                      <p className="mt-1 text-xs text-slate-500">{formatDate(row.installment.dueDate)}</p>
-                      <p className="mt-2 text-sm font-semibold text-slate-900">{formatMoney(row.installment.amount)}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </section>
-      </aside>
+      {/* Panel de vencimientos movido al Dashboard */}
     </div>
 
     <CreditsFiltersDrawer

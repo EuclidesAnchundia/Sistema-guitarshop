@@ -3,8 +3,10 @@
 import type { Dispatch, SetStateAction } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 export type ComprasFiltersDraft = {
+	orden?: "date_desc" | "date_asc" | "total_desc" | "total_asc"
 	fechaDesde: string
 	fechaHasta: string
 	proveedor: string
@@ -42,6 +44,14 @@ export function ComprasFiltersDrawer(props: Props) {
 					</DrawerHeader>
 
 					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+						<div>
+							<SortFieldDirection
+								value={props.filtersDraft.orden ?? "date_desc"}
+								onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as ComprasFiltersDraft["orden"] }))}
+								fields={[{ value: "date", label: "Fecha" }, { value: "total", label: "Total" }]}
+							/>
+						</div>
+
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha desde</label>
 							<input

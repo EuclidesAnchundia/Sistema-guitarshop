@@ -4,7 +4,7 @@ import { api } from "../lib/apiClient"
 import { filenameFromContentDisposition } from "../shared/export/contentDisposition"
 import { downloadBlob } from "../shared/export/downloadBlob"
 
-export type CreditStatus = "ACTIVO" | "EN_MORA" | "CANCELADO"
+export type CreditStatus = "ACTIVO" | "VENCIDOS" | "CANCELADO"
 export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA"
 
 export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA" | "TARJETA"
@@ -151,7 +151,7 @@ function normalizeCreditListItem(raw: unknown): CreditListItem {
 			code: asString(sale.code),
 		},
 		saldoPendiente: toNumberSafe(r.saldoPendiente),
-		status: (status === "EN_MORA" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
+		status: (status === "VENCIDOS" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
 		cliente: normalizeCliente(r.cliente),
 		nextInstallment: r.nextInstallment ? normalizeNextInstallment(r.nextInstallment) : null,
 	}
@@ -181,7 +181,7 @@ function normalizeCreditDetail(raw: unknown): CreditDetail {
 		cliente: normalizeCliente(r.cliente),
 		total: toNumberSafe(r.total),
 		saldoPendiente: toNumberSafe(r.saldoPendiente),
-		status: (status === "EN_MORA" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
+		status: (status === "VENCIDOS" || status === "CANCELADO" ? status : "ACTIVO") as CreditStatus,
 		installments: Array.isArray(r.installments) ? r.installments.map(normalizeInstallment) : [],
 	}
 }

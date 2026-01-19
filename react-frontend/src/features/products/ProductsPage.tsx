@@ -64,39 +64,38 @@ import PaginationFooter from "../../components/common/PaginationFooter"
 
 type ModalMode = "single" | "import"
 
+type ImportFieldKey =
+  | "nombre_producto"
+  | "categoria"
+  | "precio_venta"
+  | "cantidad_stock"
+  | "proveedor"
+  | "precio_compra"
+  | "stock_minimo"
+  | "descripcion"
+  | "codigo_producto"
+
 type BulkProductRow = {
-	id: string
-	categoria: ProductCategoryValue | ""
-	codigo: string
+  categoria: string
+  codigo: string
 	nombre: string
 	descripcion: string
-	precio_compra: number
-	precio_venta: number
-	cantidad_stock: number
-	stock_minimo: number
-	proveedorId: string
+  precio_compra: number
+  precio_venta: number
+  cantidad_stock: number
+  stock_minimo: number
+  proveedorId: string | number
 }
 
 type BatchProductRow = {
-	id: string
-	codigo_producto: string
-	nombre_producto: string
-	precio_venta: number
-	precio_compra: number
-	cantidad_stock: number
-	stock_minimo: number
+  id: string
+  codigo_producto: string
+  nombre_producto: string
+  precio_venta: number
+  precio_compra: number
+  cantidad_stock: number
+  stock_minimo: number
 }
-
-type ImportFieldKey =
-	| "codigo_producto"
-	| "nombre_producto"
-	| "categoria"
-	| "descripcion"
-	| "precio_compra"
-	| "precio_venta"
-	| "cantidad_stock"
-	| "stock_minimo"
-	| "proveedor"
 
 type ImportState = {
 	filename: string
@@ -1304,8 +1303,8 @@ export default function ProductsPage() {
 			const codigo = importState.mapping.codigo_producto
 				? String(row[importState.mapping.codigo_producto] ?? "").toUpperCase()
 				: ""
+			const id = generateRowId()
 			const data: BulkProductRow = {
-				id: generateRowId(),
 				categoria: categoriaValue ?? "",
 				codigo,
 				nombre: importState.mapping.nombre_producto ? String(row[importState.mapping.nombre_producto] ?? "") : "",
@@ -1317,7 +1316,7 @@ export default function ProductsPage() {
 				proveedorId: proveedorId ? String(proveedorId) : "",
 			}
 			const issues = getBulkRowIssues(data)
-			return { id: data.id, data, issues }
+			return { id, data, issues }
 		})
 	}, [importState, proveedores, getBulkRowIssues])
 
@@ -1648,18 +1647,6 @@ export default function ProductsPage() {
 						</table>
 					</div>
 
-					<PaginationFooter
-						currentPage={currentPage}
-						totalPages={totalPages}
-						pageSize={Number(pageSize)}
-						pageSizeOptions={PAGE_SIZE_OPTIONS}
-						onPrev={() => setCurrentPage((page) => Math.max(1, page - 1))}
-						onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-						onPageSizeChange={(next) => {
-							setPageSize(next as PageSizeOption)
-							setCurrentPage(1)
-						}}
-					/>
 				</div>
 
 				{productosQuery.isLoading && (
@@ -1675,6 +1662,19 @@ export default function ProductsPage() {
 						<p>No hay productos que coincidan con la búsqueda.</p>
 					</div>
 				)}
+
+				<PaginationFooter
+					currentPage={currentPage}
+					totalPages={totalPages}
+					pageSize={Number(pageSize)}
+					pageSizeOptions={PAGE_SIZE_OPTIONS}
+					onPrev={() => setCurrentPage((page) => Math.max(1, page - 1))}
+					onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+					onPageSizeChange={(next) => {
+						setPageSize(next as PageSizeOption)
+						setCurrentPage(1)
+					}}
+				/>
 			</section>
 
 			<ProductsFiltersDrawer

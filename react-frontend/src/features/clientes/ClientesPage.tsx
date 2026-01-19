@@ -72,7 +72,11 @@ direccion: "",
 }
 
 const defaultFilters: ClientesFilters = {
-orden: "name_asc",
+	orden: "name_asc",
+	estado: "all",
+	tipoId: "all",
+	fechaDesde: "",
+	fechaHasta: "",
 }
 
 const sortLabelByValue: Record<ClientesFilters["orden"], string> = {
@@ -107,6 +111,7 @@ const [searchInput, setSearchInput] = useState("")
 const [filters, setFilters] = useState<ClientesFilters>(defaultFilters)
 
 const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false)
+const [filtersDraft, setFiltersDraft] = useState<ClientesFilters>(filters)
 const [createDialogOpen, setCreateDialogOpen] = useState(false)
 const [editDialogOpen, setEditDialogOpen] = useState(false)
 const [detailDrawerOpen, setDetailDrawerOpen] = useState(false)
@@ -634,14 +639,30 @@ Eliminar
 )}
 
 <ClientesFiltersDrawer
-open={filtersDrawerOpen}
-onOpenChange={setFiltersDrawerOpen}
-filters={filters}
-onFiltersChange={(next) => {
-setFilters(next)
-setCurrentPage(1)
-}}
-/>
+	open={filtersDrawerOpen}
+	onOpenChange={(open) => {
+		if (!open) {
+			setFiltersDraft(filters)
+			setFiltersDrawerOpen(false)
+			return
+		}
+		setFiltersDraft(filters)
+		setFiltersDrawerOpen(true)
+	}}
+	filtersDraft={filtersDraft}
+	setFiltersDraft={setFiltersDraft}
+	onApply={() => {
+		setFilters(filtersDraft)
+		setFiltersDrawerOpen(false)
+		setCurrentPage(1)
+	}}
+	onCancel={() => {
+		setFiltersDraft(filters)
+		setFiltersDrawerOpen(false)
+	}}
+	onClearDraft={() => setFiltersDraft(defaultFilters)}
+/
+>
 
 <ClientesDetailDrawer
 open={detailDrawerOpen}

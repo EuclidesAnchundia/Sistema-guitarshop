@@ -2,10 +2,12 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { CreditStatus } from "../../../services/creditsApi"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 export type CreditsFilters = {
 	status: "all" | CreditStatus
 	soloVencidas: boolean
+	orden?: "date_desc" | "date_asc" | "amount_desc" | "amount_asc"
 }
 
 type Props = {
@@ -31,6 +33,13 @@ export function CreditsFiltersDrawer(props: Props) {
 					</DrawerHeader>
 
 					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+							<div>
+								<SortFieldDirection
+									value={props.filtersDraft.orden ?? "date_desc"}
+									onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as CreditsFilters["orden"] }))}
+									fields={[{ value: "date", label: "Fecha" }, { value: "total", label: "Total" }]}
+								/>
+							</div>
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado</label>
 							<select
@@ -45,7 +54,7 @@ export function CreditsFiltersDrawer(props: Props) {
 							>
 								<option value="all">Todos</option>
 								<option value="ACTIVO">ACTIVO</option>
-								<option value="EN_MORA">EN_MORA</option>
+								<option value="VENCIDOS">VENCIDOS</option>
 								<option value="CANCELADO">CANCELADO</option>
 							</select>
 						</div>

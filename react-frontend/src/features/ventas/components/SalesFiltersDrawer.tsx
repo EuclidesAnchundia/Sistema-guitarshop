@@ -2,12 +2,14 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { FormaPago } from "../../../services/salesService"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 export type SalesFilters = {
 	estado: "all" | "ACTIVA" | "ANULADA"
 	formaPago: "all" | FormaPago
 	fechaDesde: string
 	fechaHasta: string
+	orden?: "date_desc" | "date_asc" | "total_desc" | "total_asc"
 }
 
 type Props = {
@@ -33,6 +35,13 @@ export function SalesFiltersDrawer(props: Props) {
 					</DrawerHeader>
 
 					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+					<div>
+						<SortFieldDirection
+							value={props.filtersDraft.orden ?? "date_desc"}
+							onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as SalesFilters["orden"] }))}
+							fields={[{ value: "date", label: "Fecha" }, { value: "total", label: "Total" }]}
+						/>
+					</div>
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado</label>
 							<select

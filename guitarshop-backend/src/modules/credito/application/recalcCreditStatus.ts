@@ -1,8 +1,5 @@
 import prisma from "../../../shared/prisma/prismaClient";
-import { Prisma } from "../../../../generated/prisma/client";
-
-export type CreditStatus = "ACTIVO" | "EN_MORA" | "CANCELADO";
-export type InstallmentStatus = "PENDIENTE" | "PARCIAL" | "PAGADO" | "VENCIDO";
+import { Prisma, EstadoCuota, EstadoCredito } from "../../../../generated/prisma/client";
 
 function dateOnlyUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -43,15 +40,15 @@ function computeInstallmentStatus(params: {
   dueDate: Date;
   paid: boolean;
   todayUtc: Date;
-}): InstallmentStatus {
-  if (params.paid) return "PAGADO";
-  return dateOnlyUtc(params.dueDate).getTime() < params.todayUtc.getTime() ? "VENCIDO" : "PENDIENTE";
+}): (typeof EstadoCuota)[keyof typeof EstadoCuota] {
+  if (params.paid) return EstadoCuota.PAGADO;
+  return dateOnlyUtc(params.dueDate).getTime() < params.todayUtc.getTime() ? EstadoCuota.VENCIDO : EstadoCuota.PENDIENTE;
 }
 
 function computeCreditStatus(params: {
   saldoPendiente: number;
   hasOverdueUnpaid: boolean;
-}): CreditStatus {
+}): string {
   if (params.saldoPendiente <= 0) return "CANCELADO";
   if (params.hasOverdueUnpaid) return "EN_MORA";
   return "ACTIVO";
@@ -96,18 +93,14 @@ export async function recalcCreditStatus(id_credito: number, tx?: Prisma.Transac
       todayUtc,
     });
 
-    if (!paid && newEstado === "VENCIDO") {
+    if (!paid && newEstado === EstadoCuota.VENCIDO) {
       hasOverdueUnpaid = true;
     }
 
     if (cuota.estado_cuota !== newEstado) {
-      updates.push(
-        db.cuota.update({
-          where: { id_cuota: cuota.id_cuota },
-          data: { estado_cuota: newEstado },
-          select: { id_cuota: true },
-        })
-      );
+        updates.push(
+          db.$executeRaw`UPDATE cuota SET estado_cuota = CAST(${newEstado} AS "EstadoCuota") WHERE id_cuota = ${cuota.id_cuota}`
+        );
     }
   }
 
@@ -119,14 +112,13 @@ export async function recalcCreditStatus(id_credito: number, tx?: Prisma.Transac
 
   if (credito.estado_credito !== newCreditStatus || (newCreditStatus === "CANCELADO" && !credito.fecha_fin)) {
     updates.push(
-      db.credito.update({
-        where: { id_credito },
-        data: {
-          estado_credito: newCreditStatus,
-          fecha_fin: newCreditStatus === "CANCELADO" ? (credito.fecha_fin ?? new Date()) : credito.fecha_fin,
-        },
-        select: { id_credito: true },
-      })
+      db.$executeRaw`
+        UPDATE credito
+        SET estado_credito = CAST(${newCreditStatus} AS "EstadoCredito"), fecha_fin = ${
+        newCreditStatus === EstadoCredito.CANCELADO ? (credito.fecha_fin ?? new Date()) : credito.fecha_fin
+      }
+        WHERE id_credito = ${id_credito}
+      `
     );
   }
 
