@@ -79,6 +79,8 @@ export function ClientesListHeader(props: Props) {
 						Filtros
 					</button>
 
+					{/* Orden: control removed (handled in filtros) */}
+
 					<div className="relative" ref={exportRef}>
 						<button
 							type="button"

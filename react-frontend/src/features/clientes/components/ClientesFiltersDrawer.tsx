@@ -1,71 +1,116 @@
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
-import type { ClientesFilters, SortValue } from "../cliente.types"
+import type { Dispatch, SetStateAction } from "react"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "../../../components/ui/drawer"
+import type { ClientesFilters } from "../cliente.types"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 type Props = {
 	open: boolean
 	onOpenChange: (open: boolean) => void
-	filters: ClientesFilters
-	onFiltersChange: (filters: ClientesFilters) => void
+
+	filtersDraft: ClientesFilters
+	setFiltersDraft: Dispatch<SetStateAction<ClientesFilters>>
+
+	onApply: () => void
+	onCancel: () => void
+	onClearDraft: () => void
 }
 
 export function ClientesFiltersDrawer(props: Props) {
-	const handleSortChange = (orden: SortValue) => {
-		props.onFiltersChange({ ...props.filters, orden })
-	}
+	// omit sort controls in drawer for clientes
 
 	return (
 		<Drawer open={props.open} onOpenChange={props.onOpenChange}>
-			<DrawerContent className="max-h-[85vh]">
-				<DrawerHeader>
-					<DrawerTitle>Filtros de Clientes</DrawerTitle>
-					<DrawerDescription>
-						Ajusta los filtros para encontrar los clientes que buscas.
-					</DrawerDescription>
-				</DrawerHeader>
+			<DrawerContent className="overflow-hidden">
+				<div className="flex h-dvh flex-col">
+					<DrawerHeader>
+						<DrawerTitle className="pr-10">Filtros</DrawerTitle>
+						<DrawerDescription>Refina el listado y aplica.</DrawerDescription>
+					</DrawerHeader>
 
-				<div className="flex flex-col gap-6 p-6">
-					<div className="space-y-3">
-						<label className="text-sm font-medium text-slate-900">Ordenar por</label>
-						<div className="grid grid-cols-2 gap-2">
-							<button
-								onClick={() => handleSortChange("name_asc")}
-								className={`flex h-9 items-center justify-center rounded-md border px-3 py-1 text-sm font-medium transition-colors ${
-									props.filters.orden === "name_asc"
-										? "border-slate-900 bg-slate-900 text-white"
-										: "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-								}`}
+					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+						<SortFieldDirection
+							value={props.filtersDraft.orden}
+							onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as ClientesFilters["orden"] }))}
+							fields={[{ value: "name", label: "Nombre" }, { value: "date", label: "Fecha" }]}
+						/>
+
+						<div>
+							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado</label>
+							<select
+								value={props.filtersDraft.estado}
+								onChange={(event) =>
+									props.setFiltersDraft((prev) => ({ ...prev, estado: event.target.value as ClientesFilters["estado"] }))
+								}
+								className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 							>
-								Nombre A-Z
+								<option value="all">Todos</option>
+								<option value="active">Activo</option>
+								<option value="inactive">Inactivo</option>
+							</select>
+						</div>
+
+						<div>
+							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo de identificación</label>
+							<select
+								value={props.filtersDraft.tipoId}
+								onChange={(event) =>
+									props.setFiltersDraft((prev) => ({ ...prev, tipoId: event.target.value as ClientesFilters["tipoId"] }))
+								}
+								className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+							>
+								<option value="all">Todos</option>
+								<option value="ruc">RUC</option>
+								<option value="cedula">Cédula</option>
+							</select>
+						</div>
+
+						<div>
+							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de registro</label>
+							<div className="mt-1 grid gap-3 sm:grid-cols-2">
+								<div>
+									<p className="text-xs font-semibold text-slate-600">Desde</p>
+									<input
+										type="date"
+										value={props.filtersDraft.fechaDesde}
+										onChange={(event) => props.setFiltersDraft((prev) => ({ ...prev, fechaDesde: event.target.value }))}
+										className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+									/>
+								</div>
+								<div>
+									<p className="text-xs font-semibold text-slate-600">Hasta</p>
+									<input
+										type="date"
+										value={props.filtersDraft.fechaHasta}
+										onChange={(event) => props.setFiltersDraft((prev) => ({ ...prev, fechaHasta: event.target.value }))}
+										className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">
+						<button
+							type="button"
+							onClick={props.onCancel}
+							className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+						>
+							Cancelar
+						</button>
+						<div className="flex items-center gap-2">
+							<button
+								type="button"
+								onClick={props.onClearDraft}
+								className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+							>
+								Limpiar
 							</button>
 							<button
-								onClick={() => handleSortChange("name_desc")}
-								className={`flex h-9 items-center justify-center rounded-md border px-3 py-1 text-sm font-medium transition-colors ${
-									props.filters.orden === "name_desc"
-										? "border-slate-900 bg-slate-900 text-white"
-										: "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-								}`}
+								type="button"
+								onClick={props.onApply}
+								className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
 							>
-								Nombre Z-A
-							</button>
-							<button
-								onClick={() => handleSortChange("date_asc")}
-								className={`flex h-9 items-center justify-center rounded-md border px-3 py-1 text-sm font-medium transition-colors ${
-									props.filters.orden === "date_asc"
-										? "border-slate-900 bg-slate-900 text-white"
-										: "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-								}`}
-							>
-								Fecha ↑
-							</button>
-							<button
-								onClick={() => handleSortChange("date_desc")}
-								className={`flex h-9 items-center justify-center rounded-md border px-3 py-1 text-sm font-medium transition-colors ${
-									props.filters.orden === "date_desc"
-										? "border-slate-900 bg-slate-900 text-white"
-										: "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-								}`}
-							>
-								Fecha ↓
+								Aplicar
 							</button>
 						</div>
 					</div>

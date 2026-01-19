@@ -87,7 +87,7 @@ export default function VentasPage() {
   }
 
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filters, setFilters] = useState<SalesFilters>({ estado: "all", formaPago: "all", fechaDesde: "", fechaHasta: "" })
+  const [filters, setFilters] = useState<SalesFilters>({ estado: "all", formaPago: "all", fechaDesde: "", fechaHasta: "", orden: "date_desc" })
   const [filtersDraft, setFiltersDraft] = useState<SalesFilters>(filters)
   const [searchInput, setSearchInput] = useState("")
 
@@ -330,7 +330,7 @@ export default function VentasPage() {
     const desdeMs = filters.fechaDesde ? new Date(filters.fechaDesde).getTime() : null
     const hastaMs = filters.fechaHasta ? new Date(filters.fechaHasta).getTime() : null
 
-    return ventas.filter((venta) => {
+    const matched = ventas.filter((venta) => {
       const isAnulada = venta.id_estado !== 1
       if (filters.estado === "ACTIVA" && isAnulada) return false
       if (filters.estado === "ANULADA" && !isAnulada) return false
@@ -350,6 +350,32 @@ export default function VentasPage() {
       const cedula = (venta.cliente?.cedula ?? "").toLowerCase()
       return factura.includes(needle) || clienteNombre.includes(needle) || cedula.includes(needle)
     })
+
+    // Aplicar ordenamiento
+    matched.sort((a, b) => {
+      switch (filters.orden) {
+        case "date_asc": {
+          const ta = a.fecha_factura ? new Date(a.fecha_factura).getTime() : 0
+          const tb = b.fecha_factura ? new Date(b.fecha_factura).getTime() : 0
+          return ta - tb
+        }
+        case "date_desc": {
+          const ta = a.fecha_factura ? new Date(a.fecha_factura).getTime() : 0
+          const tb = b.fecha_factura ? new Date(b.fecha_factura).getTime() : 0
+          return tb - ta
+        }
+        case "total_asc": {
+          return (a.total ?? 0) - (b.total ?? 0)
+        }
+        case "total_desc": {
+          return (b.total ?? 0) - (a.total ?? 0)
+        }
+        default:
+          return 0
+      }
+    })
+
+    return matched
   }, [ventas, searchInput, filters])
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(filteredVentas.length / pageSize)), [filteredVentas.length, pageSize])

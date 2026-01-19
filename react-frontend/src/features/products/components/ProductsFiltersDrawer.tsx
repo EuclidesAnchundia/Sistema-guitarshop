@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import { productCategories } from "../../../config/productCategories"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 import type { ProductsFilters, ProveedorRecord } from "../product.types"
 
@@ -30,6 +31,20 @@ export function ProductsFiltersDrawer(props: Props) {
 					</DrawerHeader>
 
 					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+						<div>
+							<SortFieldDirection
+								value={props.filtersDraft.orden}
+								onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as ProductsFilters["orden"] }))}
+								fields={[
+									{ value: "name", label: "Nombre" },
+									{ value: "stock", label: "Stock" },
+									{ value: "price", label: "Precio" },
+									{ value: "margin", label: "Margen" },
+									{ value: "recent", label: "Más recientes" },
+								]}
+							/>
+						</div>
+
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoría</label>
 							<select
@@ -130,32 +145,7 @@ export function ProductsFiltersDrawer(props: Props) {
 							</select>
 						</div>
 
-						<div>
-							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ordenar</label>
-							<select
-								value={props.filtersDraft.orden}
-								onChange={(event) =>
-									props.setFiltersDraft((prev) => ({
-										...prev,
-										orden: event.target.value as ProductsFilters["orden"],
-									}))
-								}
-								className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-							>
-								<option value="name_asc">Nombre A-Z</option>
-								<option value="name_desc">Nombre Z-A</option>
-								<option value="stock_asc">Stock asc</option>
-								<option value="stock_desc">Stock desc</option>
-								<option value="price_asc">Precio asc</option>
-								<option value="price_desc">Precio desc</option>
-								<option value="margin_asc">Margen asc</option>
-								<option value="margin_desc">Margen desc</option>
-								<option value="status_stock">Estado stock</option>
-								<option value="status_sales">Estado ventas</option>
-								<option value="status_margin">Estado margen</option>
-								<option value="recent">Más recientes</option>
-							</select>
-						</div>
+
 					</div>
 
 					<div className="flex items-center justify-between border-t border-slate-200 px-6 py-4">

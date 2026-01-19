@@ -18,7 +18,7 @@ datasource db {
 enum EstadoCredito {
   ACTIVO
   CANCELADO
-  EN_MORA
+  VENCIDOS
   REFINANCIADO
 }
 

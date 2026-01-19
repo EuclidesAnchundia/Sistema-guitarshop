@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { AlertCircle, ArrowDownRight, ArrowUpRight, CreditCard, Package, ShieldAlert, ShoppingBag, TrendingUp, Truck, Users, Wallet2 } from "lucide-react"
+import { AlertCircle, ArrowDownRight, ArrowUpRight, CreditCard, Package, ShieldAlert, ShoppingBag, TrendingUp, Truck, Users, Wallet2, Clock } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useDashboardData } from "../../lib/hooks/useDashboardData"
 import type { CreditStatus, LowStockProduct, SalesHistoryPoint, SalesMetric, TopProduct } from "../../lib/hooks/useDashboardData"
@@ -111,8 +111,9 @@ export default function Dashboard() {
       </section>
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <div className="col-span-12 lg:col-span-7">
+        <div className="col-span-12 lg:col-span-7 flex flex-col gap-3">
           <SalesPulse history={historyWindow} latestValue={latestPoint?.total ?? 0} />
+          <ProximasVencimientosPanel detalle={data.credits.detalle} />
         </div>
         <div className="col-span-12 lg:col-span-5 grid gap-3">
           <AlertPanel
@@ -124,6 +125,7 @@ export default function Dashboard() {
           <SummaryPanel stats={summaryStats} />
         </div>
       </section>
+ 
 
       <section className="grid grid-cols-1 gap-3 lg:grid-cols-12">
         <div className="col-span-12 lg:col-span-7">
@@ -170,6 +172,48 @@ const SalesPerformanceCard = ({ metrics, total }: SalesPerformanceCardProps) => 
           </p>
         </div>
       ))}
+    </div>
+  </article>
+)
+
+// Pequeño panel de Vencimientos próximos (muestra hasta 6 items). Insertado al final para evitar ambigüedades TSX.
+type ProximaVencimiento = {
+  id_cuota: number
+  cliente: string
+  factura: string
+  montoPendiente: number
+  diasAtraso: number
+}
+
+type ProximasVencimientosPanelProps = {
+  detalle: ProximaVencimiento[]
+}
+
+const ProximasVencimientosPanel = ({ detalle }: ProximasVencimientosPanelProps) => (
+  <article className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="flex items-start justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Cobros</p>
+        <p className="mt-1 text-base font-semibold text-slate-900">Vencimientos próximos</p>
+        <p className="text-xs text-slate-500">Agenda tu seguimiento antes de que entren en mora.</p>
+      </div>
+      <Clock className="h-5 w-5 text-slate-400" />
+    </div>
+
+    <div className="mt-3">
+      {(!detalle || detalle.length === 0) ? (
+        <p className="text-sm text-slate-500">No hay vencimientos cercanos.</p>
+      ) : (
+        <ul className="space-y-3">
+          {detalle.slice(0, 6).map((row) => (
+            <li key={row.id_cuota} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p className="font-semibold text-slate-900">{row.factura}</p>
+              <p className="mt-1 text-xs text-slate-600">{row.cliente}</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{formatCurrency(row.montoPendiente)}</p>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   </article>
 )

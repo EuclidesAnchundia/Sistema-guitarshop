@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import type { ProveedoresFilters } from "../proveedor.types"
+import SortFieldDirection from "../../../components/SortFieldDirection"
 
 type Props = {
 	open: boolean
@@ -26,6 +27,14 @@ export function ProveedoresFiltersDrawer(props: Props) {
 					</DrawerHeader>
 
 					<div className="flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-5">
+						<div>
+							<SortFieldDirection
+								value={props.filtersDraft.orden}
+								onChange={(val: string) => props.setFiltersDraft((prev) => ({ ...prev, orden: val as ProveedoresFilters["orden"] }))}
+								fields={[{ value: "name", label: "Nombre" }, { value: "date", label: "Fecha" }]}
+							/>
+						</div>
+
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado</label>
 							<select
@@ -61,6 +70,8 @@ export function ProveedoresFiltersDrawer(props: Props) {
 								<option value="cedula">Cédula</option>
 							</select>
 						</div>
+
+
 
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de registro</label>

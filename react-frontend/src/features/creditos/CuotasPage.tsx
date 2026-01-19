@@ -46,7 +46,7 @@ export default function CuotasPage() {
   const { isAdmin } = useAuthUser()
   const queryClient = useQueryClient()
   const [searchInput, setSearchInput] = useState("")
-  const [filters, setFilters] = useState<CuotasFilters>({ status: "all", dateFrom: null, dateTo: null })
+  const [filters, setFilters] = useState<CuotasFilters>({ status: "all", dateFrom: null, dateTo: null, orden: "date_asc" })
   const [filtersDraft, setFiltersDraft] = useState<CuotasFilters>(filters)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [exportingKey, setExportingKey] = useState<string | null>(null)
@@ -112,6 +112,22 @@ export default function CuotasPage() {
       const cliente = (r.clienteLabel ?? "").toLowerCase()
       const credito = (r.creditoLabel ?? "").toLowerCase()
       return cliente.includes(normalizedSearch) || credito.includes(normalizedSearch) || String(r.number).includes(normalizedSearch)
+    })
+
+    // aplicar orden
+    filtered.sort((a, b) => {
+      switch (filters.orden) {
+        case "date_asc":
+          return (a.dueDate ? new Date(a.dueDate).getTime() : 0) - (b.dueDate ? new Date(b.dueDate).getTime() : 0)
+        case "date_desc":
+          return (b.dueDate ? new Date(b.dueDate).getTime() : 0) - (a.dueDate ? new Date(a.dueDate).getTime() : 0)
+        case "amount_asc":
+          return (a.amount ?? 0) - (b.amount ?? 0)
+        case "amount_desc":
+          return (b.amount ?? 0) - (a.amount ?? 0)
+        default:
+          return 0
+      }
     })
   }, [installments, filters, normalizedSearch])
 

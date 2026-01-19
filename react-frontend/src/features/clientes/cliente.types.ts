@@ -14,9 +14,12 @@ export type SortValue =
 	| "name_desc"
 	| "date_asc"
 	| "date_desc"
-
 export type ClientesFilters = {
 	orden: SortValue
+	estado: "all" | "active" | "inactive"
+	tipoId: "all" | "ruc" | "cedula"
+	fechaDesde: string
+	fechaHasta: string
 }
 
 export type ClientePayload = {
