@@ -1,10 +1,13 @@
 import { CreditCard, Download, Loader2, NotebookPen, XOctagon } from "lucide-react"
-import { useState } from "react"
+import { useState, useCallback } from "react"
 
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
+import PayphoneCheckout from "../../../components/PayphoneCheckout"
 import type { VentaDetailRecord } from "../../../services/salesService"
 import { formatMoneyOrDash } from "../../../utils/number"
 import { SaleInvoiceAutoPrint } from "./SaleInvoiceAutoPrint"
+import PaymentsList from "./PaymentsList"
+import { salesService } from "../../../services/salesService"
 
 type Props = {
 	open: boolean
@@ -29,8 +32,22 @@ type Props = {
 }
 
 export function SalesDetailDrawer(props: Props) {
+	const { onClose } = props
 	const [autoPrintEnabled, setAutoPrintEnabled] = useState(false)
-	const sale = props.sale
+	const [localSale, setLocalSale] = useState<VentaDetailRecord | null>(props.sale)
+
+	const sale = localSale ?? props.sale
+
+	const saleRefetch = useCallback(() => {
+		if (!sale) return
+		const id = sale.id_factura
+		salesService.getSale(id).then((s) => setLocalSale(s)).catch(() => {})
+	}, [sale])
+
+	const handleAutoPrintDone = useCallback(() => {
+		setAutoPrintEnabled(false)
+		onClose()
+	}, [onClose])
 
 	return (
 		<Drawer open={props.open} onOpenChange={props.onOpenChange}>
@@ -203,6 +220,24 @@ export function SalesDetailDrawer(props: Props) {
 											Exportar PDF
 										</button>
 									)}
+
+									{/* Payphone checkout for contado invoices */}
+									{sale.forma_pago === "CONTADO" && sale.id_estado === 1 && (
+										<PayphoneCheckout idFactura={sale.id_factura} amount={sale.total} className="inline-flex items-center rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" />
+									)}
+
+									{/* Payments ledger & polling */}
+									{sale.id_factura && (
+										<div className="mt-2 w-full">
+											{/* Mostrar últimos pagos */}
+											{/* Simple polling: cada 5s chequear pagos y notificar confirmaciones */}
+											{sale && (
+												<div className="text-sm">
+													<PaymentsList facturaId={sale.id_factura} saleRefetch={saleRefetch} />
+												</div>
+											)}
+										</div>
+									)}
 								</div>
 
 								{sale.credito && (
@@ -226,14 +261,7 @@ export function SalesDetailDrawer(props: Props) {
 			</DrawerContent>
 
 			{sale && (
-					<SaleInvoiceAutoPrint
-						enabled={autoPrintEnabled}
-						sale={sale}
-						onDone={() => {
-							setAutoPrintEnabled(false)
-							props.onClose()
-						}}
-					/>
+					<SaleInvoiceAutoPrint enabled={autoPrintEnabled} sale={sale} onDone={handleAutoPrintDone} />
 			)}
 		</Drawer>
 	)

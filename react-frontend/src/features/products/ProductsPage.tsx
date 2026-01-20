@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../components/ui/dialog"
+import ProviderSearchAutocomplete from "./components/ProviderSearchAutocomplete"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../components/ui/drawer"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { useDebouncedValue } from "../../lib/hooks/useDebouncedValue"
@@ -90,11 +91,12 @@ type BulkProductRow = {
 type BatchProductRow = {
   id: string
   codigo_producto: string
+	categoria: string
   nombre_producto: string
-  precio_venta: number
-  precio_compra: number
-  cantidad_stock: number
-  stock_minimo: number
+	precio_venta: string
+	precio_compra: string
+	cantidad_stock: string
+	stock_minimo: string
 }
 
 type ImportState = {
@@ -204,12 +206,13 @@ const generateRowId = () =>
 
 const createBlankBatchRow = (): BatchProductRow => ({
 	id: generateRowId(),
+	categoria: "",
 	codigo_producto: "",
 	nombre_producto: "",
-	precio_venta: 0,
-	precio_compra: 0,
-	cantidad_stock: 0,
-	stock_minimo: 0,
+	precio_venta: "",
+	precio_compra: "",
+	cantidad_stock: "",
+	stock_minimo: "",
 })
 
 const normalizeNumber = (value: unknown) => {
@@ -373,6 +376,7 @@ export default function ProductsPage() {
 	})
 	const [batchRows, setBatchRows] = useState<BatchProductRow[]>(() => [createBlankBatchRow()])
 	const [batchRowSaveErrors, setBatchRowSaveErrors] = useState<Record<string, string>>({})
+	const [allowMixedList] = useState(true)
 	const [dialogExtraTakenCodes, setDialogExtraTakenCodes] = useState<string[]>([])
 	const [searchInput, setSearchInput] = useState("")
 	const debouncedSearchInput = useDebouncedValue(searchInput, 300)
@@ -397,6 +401,7 @@ export default function ProductsPage() {
 	const [importSubmitting, setImportSubmitting] = useState(false)
 	const [uploadedPreview, setUploadedPreview] = useState<string | null>(null)
 	const [imageMode, setImageMode] = useState<"url" | "upload">("url")
+	const [providerSearch, setProviderSearch] = useState("")
 	const [imageUploadError, setImageUploadError] = useState<string | null>(null)
 	const [imageProcessing, setImageProcessing] = useState(false)
 
@@ -436,6 +441,7 @@ export default function ProductsPage() {
 		setImageUploadError(null)
 		setImageProcessing(false)
 		form.reset(defaultValues)
+		setProviderSearch("")
 	}
 
 	const deferHeavy = (cb: () => void) => {
@@ -460,6 +466,7 @@ export default function ProductsPage() {
 			setUploadedPreview(null)
 			setImageMode("url")
 			form.reset(defaultValues)
+			setProviderSearch("")
 		})
 	}
 
@@ -486,6 +493,7 @@ export default function ProductsPage() {
 				stock_minimo: String(producto.stock_minimo ?? 0),
 				id_proveedor: producto.id_proveedor ? String(producto.id_proveedor) : "",
 			})
+			setProviderSearch(producto.proveedor?.nombre_proveedor ?? "")
 		})
 	}
 
@@ -756,10 +764,14 @@ export default function ProductsPage() {
 	const getBatchRowIssues = useCallback((row: BatchProductRow) => {
 		const issues: string[] = []
 		if (!row.nombre_producto.trim()) issues.push("Nombre")
-		if (!(row.precio_venta > 0)) issues.push("Precio venta")
-		if (row.precio_compra < 0) issues.push("Precio compra")
-		if (!Number.isInteger(row.cantidad_stock) || row.cantidad_stock < 0) issues.push("Stock")
-		if (!Number.isInteger(row.stock_minimo) || row.stock_minimo < 0) issues.push("Stock mínimo")
+		const precioVenta = normalizeNumber(row.precio_venta)
+		const precioCompra = normalizeNumber(row.precio_compra)
+		const cantidadStock = normalizeNumber(row.cantidad_stock)
+		const stockMinimo = normalizeNumber(row.stock_minimo)
+		if (!(precioVenta > 0)) issues.push("Precio venta")
+		if (precioCompra < 0) issues.push("Precio compra")
+		if (!Number.isInteger(cantidadStock) || cantidadStock < 0) issues.push("Stock")
+		if (!Number.isInteger(stockMinimo) || stockMinimo < 0) issues.push("Stock mínimo")
 		return issues
 	}, [])
 
@@ -767,28 +779,7 @@ export default function ProductsPage() {
 		return batchRows.filter((row) => getBatchRowIssues(row).length === 0).length
 	}, [batchRows, getBatchRowIssues])
 
-	const assignBatchCodes = useCallback(
-		(categoria: ProductCategoryValue | "", rows: BatchProductRow[]) => {
-			if (!categoria) {
-				return rows.map((row) => ({ ...row, codigo_producto: "" }))
-			}
-			const prefix = getCategoryPrefix(categoria)
-			if (!prefix) return rows
-			const taken = new Set<string>(dialogEffectiveTakenCodes)
-			return rows.map((row) => {
-				const codigo = buildNextCode(prefix, taken)
-				taken.add(codigo.toUpperCase())
-				return { ...row, codigo_producto: codigo }
-			})
-		},
-		[dialogEffectiveTakenCodes]
-	)
-
-	useEffect(() => {
-		if (!dialogOpen) return
-		if (editingProduct) return
-		setBatchRows((rows) => assignBatchCodes((watchedCategoria as ProductCategoryValue) ?? "", rows))
-	}, [dialogOpen, editingProduct, watchedCategoria, assignBatchCodes])
+	// Category is selected per-row now; do not auto-assign client codes here.
 
 	const handleBatchFieldChange = (rowId: string, field: keyof Omit<BatchProductRow, "id" | "codigo_producto">, value: string | number) => {
 		setBatchRowSaveErrors((prev) => {
@@ -810,25 +801,13 @@ export default function ProductsPage() {
 		setFormError(null)
 		setBatchRowSaveErrors({})
 
-		const categoriaRaw = form.getValues("categoria")
 		const proveedorRaw = form.getValues("id_proveedor")
-		if (!categoriaRaw) {
-			form.setError("categoria", { type: "manual", message: "Selecciona una categoría" })
-			setFormError("Selecciona una categoría para continuar.")
-			return
-		}
 		if (!proveedorRaw) {
 			form.setError("id_proveedor", { type: "manual", message: "Selecciona un proveedor" })
 			setFormError("Selecciona un proveedor para continuar.")
 			return
 		}
 
-		const categoria = categoriaRaw as ProductCategoryValue
-		const prefix = getCategoryPrefix(categoria)
-		if (!prefix) {
-			setFormError("No se pudo generar el prefijo de categoría.")
-			return
-		}
 		const proveedorId = Number(proveedorRaw)
 		if (!Number.isInteger(proveedorId) || proveedorId <= 0) {
 			form.setError("id_proveedor", { type: "manual", message: "Selecciona un proveedor válido" })
@@ -852,27 +831,45 @@ export default function ProductsPage() {
 
 		for (const row of validRows) {
 			try {
-				let codigo = row.codigo_producto
-				if (!codigo || localTaken.has(codigo.toUpperCase())) {
-					codigo = buildNextCode(prefix, localTaken)
+				// Each row must have its own category selected
+				if (!row.categoria) {
+					failed += 1
+					rowErrors[row.id] = "Selecciona una categoría"
+					continue
 				}
-				localTaken.add(codigo.toUpperCase())
 
+				let codigo = row.codigo_producto || ""
+				if (!allowMixedList) {
+					const prefix = getCategoryPrefix(row.categoria as ProductCategoryValue)
+					if (!prefix) {
+						failed += 1
+						rowErrors[row.id] = "Categoría inválida"
+						continue
+					}
+					if (!codigo || localTaken.has(codigo.toUpperCase())) {
+						codigo = buildNextCode(prefix, localTaken)
+					}
+					localTaken.add(codigo.toUpperCase())
+				}
+
+				const prefix = getCategoryPrefix(row.categoria as ProductCategoryValue) ?? undefined
 				const payload: ProductoPayload = {
 					codigo_producto: codigo,
+					categoria: prefix,
 					nombre_producto: row.nombre_producto.trim(),
 					descripcion: null,
 					id_proveedor: proveedorId,
-					precio_compra: row.precio_compra,
-					precio_venta: row.precio_venta,
-					cantidad_stock: row.cantidad_stock,
-					stock_minimo: row.stock_minimo,
+					precio_compra: normalizeNumber(row.precio_compra),
+					precio_venta: normalizeNumber(row.precio_venta),
+					cantidad_stock: normalizeNumber(row.cantidad_stock),
+					stock_minimo: normalizeNumber(row.stock_minimo),
 				}
 
 				const data = await productClient.create(payload)
 				await saveProductImage(data.id_producto, null)
 				success += 1
-				createdCodes.push(codigo.toUpperCase())
+				const created = (data.codigo_producto || codigo || "").toUpperCase()
+				if (created) createdCodes.push(created)
 				successfulRowIds.add(row.id)
 			} catch (error) {
 				failed += 1
@@ -1724,24 +1721,31 @@ export default function ProductsPage() {
 
 							<div>
 								<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proveedor</label>
-								<select
-									value={String(filtersDraft.proveedorId)}
-									onChange={(event) => {
-										const raw = event.target.value
-										setFiltersDraft((prev) => ({
-											...prev,
-											proveedorId: raw === "all" ? "all" : Number(raw),
-										}))
-									}}
-									className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-								>
-									<option value="all">Todos</option>
-									{proveedores.map((prov) => (
-										<option key={prov.id_proveedor} value={prov.id_proveedor}>
-											{prov.nombre_proveedor}
-										</option>
-									))}
-								</select>
+								<div className="mt-1 flex items-center gap-2">
+									<div className="flex-1">
+										<ProviderSearchAutocomplete
+											proveedores={proveedores}
+											value={
+												filtersDraft.proveedorId === "all"
+													? ""
+													: (proveedores.find((p) => p.id_proveedor === (filtersDraft.proveedorId as number))?.nombre_proveedor ?? "")
+											}
+											onSelect={(prov) => {
+												setFiltersDraft((prev) => ({ ...prev, proveedorId: prov ? prov.id_proveedor : "all" }))
+											}}
+										/>
+									</div>
+
+									{filtersDraft.proveedorId !== "all" && (
+										<button
+											type="button"
+											onClick={() => setFiltersDraft((prev) => ({ ...prev, proveedorId: "all" }))}
+											className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+										>
+											Limpiar
+										</button>
+									)}
+								</div>
 							</div>
 
 							<div>
@@ -1821,11 +1825,11 @@ export default function ProductsPage() {
 				}}
 			>
 				<DialogContent
-					className="dialog-content w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl"
+					className="dialog-content w-[95vw] sm:w-[92vw] max-w-7xl max-h-[92vh] overflow-hidden p-0 sm:rounded-3xl"
 					hideCloseButton
 					disableOutsideClose
 				>
-					<div className="flex h-[90vh] flex-col">
+					<div className="flex max-h-[92vh] flex-col">
 						<DialogHeader className="border-b px-8 py-6 text-left">
 							<DialogTitle className="text-2xl font-semibold text-slate-900">
 								{editingProduct ? "Editar producto" : "Nuevo producto"}
@@ -1921,22 +1925,21 @@ export default function ProductsPage() {
 												)}
 											</div>
 											<div>
-												<label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
-												<select
-													{...form.register("id_proveedor")}
-													className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+												<label className="sr-only">Proveedor</label>
+												<ProviderSearchAutocomplete
+													proveedores={proveedores}
+													value={providerSearch}
 													disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
-													defaultValue=""
-												>
-													<option value="" className="text-slate-400">
-														Selecciona un proveedor
-													</option>
-													{proveedores.map((prov) => (
-														<option key={prov.id_proveedor} value={prov.id_proveedor}>
-															{prov.nombre_proveedor}
-														</option>
-													))}
-												</select>
+													onSelect={(prov) => {
+														if (!prov) {
+															form.setValue("id_proveedor", "")
+															setProviderSearch("")
+															return
+														}
+														form.setValue("id_proveedor", String(prov.id_proveedor), { shouldValidate: true })
+														setProviderSearch(prov.nombre_proveedor)
+													}}
+												/>
 												{form.formState.errors.id_proveedor && (
 													<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
 												)}
@@ -2098,44 +2101,24 @@ export default function ProductsPage() {
 								<div className="flex flex-1 flex-col overflow-hidden">
 									<div className="flex-1 space-y-6 overflow-y-auto px-8 py-6">
 										<div className="rounded-2xl border border-slate-200 p-4">
-											<p className="text-sm font-semibold text-slate-700">Categoría y proveedor</p>
-											<div className="mt-4 grid gap-4 md:grid-cols-2">
+											<p className="text-sm font-semibold text-slate-700">Proveedor</p>
+											<div className="mt-4 grid gap-4 md:grid-cols-1">
 												<div>
-													<label className="text-xs font-medium uppercase text-slate-500">Categoría</label>
-													<select
-														{...form.register("categoria")}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-													>
-														<option value="" className="text-slate-400">
-															Selecciona una categoría
-														</option>
-														{productCategories.map((category) => (
-															<option key={category.value} value={category.value}>
-																{category.label}
-															</option>
-														))}
-													</select>
-													{form.formState.errors.categoria && (
-														<p className="mt-1 text-xs text-red-600">{form.formState.errors.categoria.message}</p>
-													)}
-												</div>
-												<div>
-													<label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
-													<select
-														{...form.register("id_proveedor")}
-														className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+													<label className="sr-only">Proveedor</label>
+													<ProviderSearchAutocomplete
+														proveedores={proveedores}
+														value={providerSearch}
 														disabled={proveedoresQuery.isLoading || proveedoresNoDisponibles || noProveedoresDisponibles}
-														defaultValue=""
-													>
-														<option value="" className="text-slate-400">
-															Selecciona un proveedor
-														</option>
-														{proveedores.map((prov) => (
-															<option key={prov.id_proveedor} value={prov.id_proveedor}>
-																{prov.nombre_proveedor}
-															</option>
-														))}
-													</select>
+														onSelect={(prov) => {
+															if (!prov) {
+																form.setValue("id_proveedor", "")
+																setProviderSearch("")
+																return
+															}
+															form.setValue("id_proveedor", String(prov.id_proveedor), { shouldValidate: true })
+															setProviderSearch(prov.nombre_proveedor)
+														}}
+													/>
 													{form.formState.errors.id_proveedor && (
 														<p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
 													)}
@@ -2150,21 +2133,7 @@ export default function ProductsPage() {
 												</div>
 												<button
 													type="button"
-													onClick={() => {
-														setBatchRows((rows) => {
-															const categoria = (form.getValues("categoria") as ProductCategoryValue | "") ?? ""
-															const newRow = createBlankBatchRow()
-															if (!categoria) return [...rows, newRow]
-															const prefix = getCategoryPrefix(categoria)
-															if (!prefix) return [...rows, newRow]
-															const taken = new Set<string>(dialogEffectiveTakenCodes)
-															rows.forEach((row) => {
-																if (row.codigo_producto) taken.add(row.codigo_producto.toUpperCase())
-															})
-															const codigo = buildNextCode(prefix, taken)
-															return [...rows, { ...newRow, codigo_producto: codigo }]
-														})
-													}}
+													onClick={() => setBatchRows((rows) => [...rows, createBlankBatchRow()])}
 													className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
 												>
 													<Plus className="h-4 w-4" />
@@ -2182,7 +2151,7 @@ export default function ProductsPage() {
 												<table className="min-w-[980px] w-full text-sm">
 													<thead>
 														<tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-															<th className="py-2 pr-3">Código</th>
+															<th className="py-2 pr-3">Categoría</th>
 															<th className="py-2 pr-3">Nombre</th>
 															<th className="py-2 pr-3">Compra</th>
 															<th className="py-2 pr-3">Venta</th>
@@ -2199,12 +2168,18 @@ export default function ProductsPage() {
 															return (
 																<tr key={row.id} className={hasProblems ? "bg-red-50/30" : undefined}>
 																	<td className="py-3 pr-3 align-top">
-																		<input
-																			readOnly
-																			value={row.codigo_producto}
-																			placeholder="Selecciona categoría"
-																			className="w-full rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold tracking-[0.16em] text-slate-700"
-																		/>
+																		<select
+																			value={row.categoria}
+																			onChange={(event) => handleBatchFieldChange(row.id, "categoria", event.target.value)}
+																			className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+																		>
+																			<option value="">Selecciona categoría</option>
+																			{productCategories.map((c) => (
+																				<option key={c.value} value={c.value}>
+																					{c.label}
+																				</option>
+																			))}
+																		</select>
 																	</td>
 																	<td className="py-3 pr-3 align-top">
 																		<input
@@ -2216,35 +2191,37 @@ export default function ProductsPage() {
 																	</td>
 																	<td className="py-3 pr-3 align-top">
 																		<input
-																			type="number"
-																			step="0.01"
+																			type="text"
+																			inputMode="decimal"
 																			value={row.precio_compra}
-																			onChange={(event) => handleBatchFieldChange(row.id, "precio_compra", Number(event.target.value))}
+																			onChange={(event) => handleBatchFieldChange(row.id, "precio_compra", event.target.value)}
 																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 																		/>
 																	</td>
 																	<td className="py-3 pr-3 align-top">
 																		<input
-																			type="number"
-																			step="0.01"
+																			type="text"
+																			inputMode="decimal"
 																			value={row.precio_venta}
-																			onChange={(event) => handleBatchFieldChange(row.id, "precio_venta", Number(event.target.value))}
+																			onChange={(event) => handleBatchFieldChange(row.id, "precio_venta", event.target.value)}
 																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 																		/>
 																	</td>
 																	<td className="py-3 pr-3 align-top">
 																		<input
-																			type="number"
+																			type="text"
+																			inputMode="numeric"
 																			value={row.cantidad_stock}
-																			onChange={(event) => handleBatchFieldChange(row.id, "cantidad_stock", Number(event.target.value))}
+																			onChange={(event) => handleBatchFieldChange(row.id, "cantidad_stock", event.target.value)}
 																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 																		/>
 																	</td>
 																	<td className="py-3 pr-3 align-top">
 																		<input
-																			type="number"
+																			type="text"
+																			inputMode="numeric"
 																			value={row.stock_minimo}
-																			onChange={(event) => handleBatchFieldChange(row.id, "stock_minimo", Number(event.target.value))}
+																			onChange={(event) => handleBatchFieldChange(row.id, "stock_minimo", event.target.value)}
 																			className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
 																		/>
 																	</td>

@@ -99,6 +99,7 @@ export async function POST(req: Request) {
 
     const producto = await crearProducto({
       codigo_producto: body.codigo_producto,
+      categoria: body.categoria ?? undefined,
       nombre_producto: body.nombre_producto,
       descripcion: body.descripcion ?? null,
       id_proveedor: body.id_proveedor ?? null,

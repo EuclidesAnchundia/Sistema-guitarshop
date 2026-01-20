@@ -54,6 +54,15 @@ telefono: z
 .optional()
 .or(z.literal("")),
 direccion: z.string().trim().max(150, "Máximo 150 caracteres").optional().or(z.literal("")),
+fecha_nacimiento: z.string().optional().or(z.literal("")).refine((val) => {
+	if (!val) return true
+ 	const fecha = new Date(val)
+ 	if (isNaN(fecha.getTime())) return false
+ 	const today = new Date();
+ 	today.setHours(0,0,0,0)
+ 	fecha.setHours(0,0,0,0)
+ 	return fecha <= today
+}, { message: "Fecha de nacimiento inválida o futura" }),
 })
 
 type ClienteFormValues = z.infer<typeof clienteSchema>
@@ -62,6 +71,17 @@ const dateFormatter = new Intl.DateTimeFormat("es-EC", {
 dateStyle: "medium",
 })
 
+const formatDateSafe = (value?: string | null) => {
+	if (!value) return "—"
+	try {
+		const d = new Date(value)
+		if (Number.isNaN(d.getTime())) return "—"
+		return dateFormatter.format(d)
+	} catch {
+		return "—"
+	}
+}
+
 const defaultValues: ClienteFormValues = {
 nombres: "",
 apellidos: "",
@@ -69,6 +89,7 @@ cedula: "",
 correo: "",
 telefono: "",
 direccion: "",
+fecha_nacimiento: "",
 }
 
 const defaultFilters: ClientesFilters = {
@@ -279,6 +300,7 @@ cedula: values.cedula,
 correo: values.correo || null,
 telefono: values.telefono || null,
 direccion: values.direccion || null,
+fecha_nacimiento: values.fecha_nacimiento || null,
 }
 createMutation.mutate(payload)
 },
@@ -295,6 +317,7 @@ cedula: values.cedula,
 correo: values.correo || null,
 telefono: values.telefono || null,
 direccion: values.direccion || null,
+fecha_nacimiento: values.fecha_nacimiento || null,
 }
 updateMutation.mutate({ id: editingCliente.id_cliente, payload })
 },
@@ -325,6 +348,8 @@ cedula: cliente.cedula,
 correo: cliente.correo || "",
 telefono: cliente.telefono || "",
 direccion: cliente.direccion || "",
+// input[type=date] necesita formato YYYY-MM-DD
+fecha_nacimiento: cliente.fecha_nacimiento ? String(cliente.fecha_nacimiento).slice(0, 10) : "",
 })
 		void editForm.trigger()
 setEditDialogOpen(true)
@@ -474,7 +499,7 @@ onClearAllFilters={() => setFilters(defaultFilters)}
 <p className="mt-1 line-clamp-1 text-xs text-slate-500">{cliente.direccion || ""}</p>
 </td>
 <td className="px-6 py-4 text-sm text-slate-600">
-{dateFormatter.format(new Date(cliente.fecha_registro))}
+{formatDateSafe(cliente.fecha_registro)}
 </td>
 <td className="px-6 py-4 text-right">
 <div className="flex items-center justify-end gap-3">
@@ -769,6 +794,18 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 <p className="mt-1 text-xs text-red-600">{form.formState.errors.telefono.message}</p>
 )}
 </div>
+
+<div>
+<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de nacimiento</label>
+<input
+{...form.register("fecha_nacimiento")}
+type="date"
+className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+/>
+{form.formState.errors.fecha_nacimiento && (
+<p className="mt-1 text-xs text-red-600">{form.formState.errors.fecha_nacimiento.message}</p>
+)}
+</div>
 </div>
 </div>
 
@@ -891,6 +928,18 @@ className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focu
 />
 {editForm.formState.errors.telefono && (
 <p className="mt-1 text-xs text-red-600">{editForm.formState.errors.telefono.message}</p>
+)}
+</div>
+
+<div>
+<label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de nacimiento</label>
+<input
+{...editForm.register("fecha_nacimiento")}
+type="date"
+className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+/>
+{editForm.formState.errors.fecha_nacimiento && (
+<p className="mt-1 text-xs text-red-600">{editForm.formState.errors.fecha_nacimiento.message}</p>
 )}
 </div>
 </div>

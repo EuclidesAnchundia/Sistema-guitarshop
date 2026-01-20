@@ -207,15 +207,11 @@ export async function crearVenta(data: {
       }
     }
 
-    // 2.2) Generar número de factura sencillo
-    // (Puedes mejorarlo luego con serie, etc.)
-    const ultima = await tx.factura.findFirst({
-      orderBy: { id_factura: "desc" },
-      select: { id_factura: true },
-    });
-    const siguienteNumero =
-      (ultima?.id_factura ?? 0) + 1;
-    const numero_factura = `F-${siguienteNumero.toString().padStart(6, "0")}`;
+    // 2.2) Generar número de factura atómico (BACKEND es la fuente de verdad)
+    // Formato: FAC-YYYYMMDD-NNNN (secuencia por día)
+    // Usamos el servicio de códigos para asegurar atomicidad.
+    const { default: codeService } = await import("../services/codeService");
+    const numero_factura = await codeService.generateFacturaNumber(tx, new Date());
 
     // 2.3) Crear factura (cabecera)
     const nuevaFactura = await tx.factura.create({
@@ -287,24 +283,77 @@ export async function crearVenta(data: {
         throw new Error("NUMERO_CUOTAS_INVALIDO");
       }
 
-      const fechaInicio = new Date();
-      const fechaPrimera = new Date(fecha_primer_vencimiento);
-      if (Number.isNaN(fechaPrimera.getTime())) {
-        throw new Error("FECHA_PRIMER_VENCIMIENTO_INVALIDA");
-      }
+        const fechaInicio = new Date();
+
+        // Determinar fecha del primer vencimiento.
+        // Si `fecha_primer_vencimiento` viene en la config, la usamos (validando).
+        // Si NO viene, intentamos derivarla desde la `fecha_nacimiento` del cliente
+        // (día de corte = día del mes del nacimiento). Esto permite que al crear
+        // un crédito desde una venta, el día de corte se base en la fecha de nacimiento.
+        let fechaPrimera: Date
+        if (fecha_primer_vencimiento) {
+          fechaPrimera = new Date(fecha_primer_vencimiento)
+          if (Number.isNaN(fechaPrimera.getTime())) {
+            throw new Error("FECHA_PRIMER_VENCIMIENTO_INVALIDA");
+          }
+        } else {
+          // Intentar obtener fecha_nacimiento del cliente
+          const clienteRec = await tx.cliente.findUnique({
+            where: { id_cliente: idCliente },
+            select: { fecha_nacimiento: true },
+          })
+
+          if (clienteRec?.fecha_nacimiento) {
+            const nacimiento = clienteRec.fecha_nacimiento
+
+            // calcula la próxima fecha de corte usando día de nacimiento
+            const getNextFechaCorteLocal = (fechaNacimiento: Date, fechaRef = new Date()) => {
+              // `fechaNacimiento` comes from the DB (DATE without time).
+              // Prisma returns a Date object which may be interpreted in UTC,
+              // so read the UTC date components to avoid timezone shifts.
+              const dia = fechaNacimiento.getUTCDate()
+              const ref = new Date(fechaRef)
+              const refYear = ref.getFullYear()
+              const refMonth = ref.getMonth()
+              const refDay = ref.getDate()
+
+              let targetMonth = refMonth
+              let targetYear = refYear
+
+              if (dia < refDay) {
+                targetMonth = refMonth + 1
+                if (targetMonth > 11) {
+                  targetMonth = 0
+                  targetYear = refYear + 1
+                }
+              }
+
+              const lastOfTarget = new Date(targetYear, targetMonth + 1, 0)
+              const lastDay = lastOfTarget.getDate()
+              const corteDay = Math.min(dia, lastDay)
+
+              return new Date(targetYear, targetMonth, corteDay)
+            }
+
+            fechaPrimera = getNextFechaCorteLocal(nacimiento, new Date())
+          } else {
+            // No hay fecha_primer_vencimiento ni fecha_nacimiento: no podemos derivar
+            throw new Error("FECHA_PRIMER_VENCIMIENTO_INVALIDA")
+          }
+        }
 
       const intervaloDias = dias_entre_cuotas ?? null;
 
-      function addMonthsPreserveDayUtc(base: Date, monthsToAdd: number) {
-        const year = base.getUTCFullYear();
-        const month = base.getUTCMonth();
-        const day = base.getUTCDate();
+      function addMonthsPreserveDayLocal(base: Date, monthsToAdd: number) {
+        const year = base.getFullYear();
+        const month = base.getMonth();
+        const day = base.getDate();
 
         const targetMonthIndex = month + monthsToAdd;
-        const lastOfTarget = new Date(Date.UTC(year, targetMonthIndex + 1, 0));
-        const safeDay = Math.min(day, lastOfTarget.getUTCDate());
+        const lastOfTarget = new Date(year, targetMonthIndex + 1, 0);
+        const safeDay = Math.min(day, lastOfTarget.getDate());
 
-        return new Date(Date.UTC(year, targetMonthIndex, safeDay));
+        return new Date(year, targetMonthIndex, safeDay);
       }
 
       const credito = await tx.credito.create({
@@ -338,10 +387,10 @@ export async function crearVenta(data: {
         const fechaVenc = intervaloDias
           ? (() => {
               const d = new Date(fechaPrimera);
-              d.setUTCDate(d.getUTCDate() + i * intervaloDias);
+              d.setDate(d.getDate() + i * intervaloDias);
               return d;
             })()
-          : addMonthsPreserveDayUtc(fechaPrimera, i);
+          : addMonthsPreserveDayLocal(fechaPrimera, i);
 
         const montoCuota =
           i === numero_cuotas - 1

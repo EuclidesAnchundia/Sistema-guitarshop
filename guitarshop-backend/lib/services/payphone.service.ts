@@ -38,7 +38,13 @@ const CALLBACK_URL = process.env.PAYPHONE_CALLBACK_URL;
 export async function createPayphonePaymentIntent(
   params: CreateIntentParams
 ): Promise<CreateIntentResult> {
-  if (!API_URL) throw new Error("PAYPHONE_API_URL no configurado");
+  if (!API_URL) throw new Error("PAYPHONE_API_URL no está configurado. Por favor define PAYPHONE_API_URL en .env.local con la URL completa del endpoint de PayPhone sandbox.");
+  // Validación defensiva de formato de URL
+  try {
+    new URL(API_URL)
+  } catch {
+    throw new Error("PAYPHONE_API_URL no está bien formada: " + String(API_URL))
+  }
 
   const clientTransactionId = params.clientTransactionId ?? randomUUID();
 

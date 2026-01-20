@@ -11,6 +11,7 @@ const clienteSelect = {
   correo: true,
   telefono: true,
   direccion: true,
+  fecha_nacimiento: true,
   fecha_registro: true,
   id_estado: true,
 } as const;
@@ -50,6 +51,7 @@ export async function crearCliente(data: {
   correo?: string | null;
   telefono?: string | null;
   direccion?: string | null;
+  fecha_nacimiento?: string | Date | null;
   id_usuario_modifi?: number | null;
 }) {
   try {
@@ -61,6 +63,24 @@ export async function crearCliente(data: {
         correo: data.correo ?? null,
         telefono: data.telefono ?? null,
         direccion: data.direccion ?? null,
+        fecha_nacimiento: data.fecha_nacimiento
+          ? (function toLocalDate(value: string | Date) {
+              if (value instanceof Date) {
+                return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+              }
+              const s = String(value)
+              const m = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(s)
+              if (m) {
+                const y = Number(m[1])
+                const mo = Number(m[2])
+                const d = Number(m[3])
+                return new Date(y, mo - 1, d)
+              }
+              const parsed = new Date(s)
+              if (Number.isNaN(parsed.getTime())) return null
+              return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+            })(data.fecha_nacimiento)
+          : null,
         // fecha_registro se pone sola (default now())
         id_estado: 1, // ACTIVO
         id_usuario_modifi: data.id_usuario_modifi ?? null,
@@ -93,6 +113,7 @@ export async function actualizarCliente(
     correo?: string | null;
     telefono?: string | null;
     direccion?: string | null;
+    fecha_nacimiento?: string | Date | null;
     id_usuario_modifi?: number | null;
   }
 ) {
@@ -104,6 +125,25 @@ export async function actualizarCliente(
   if (data.correo !== undefined) updateData.correo = data.correo;
   if (data.telefono !== undefined) updateData.telefono = data.telefono;
   if (data.direccion !== undefined) updateData.direccion = data.direccion;
+  if (data.fecha_nacimiento !== undefined)
+    updateData.fecha_nacimiento = data.fecha_nacimiento === null
+      ? null
+      : (function toLocalDate(value: string | Date) {
+          if (value instanceof Date) {
+            return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+          }
+          const s = String(value)
+          const m = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(s)
+          if (m) {
+            const y = Number(m[1])
+            const mo = Number(m[2])
+            const d = Number(m[3])
+            return new Date(y, mo - 1, d)
+          }
+          const parsed = new Date(s)
+          if (Number.isNaN(parsed.getTime())) return null
+          return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+        })(data.fecha_nacimiento as string | Date)
   if (data.id_usuario_modifi !== undefined)
     updateData.id_usuario_modifi = data.id_usuario_modifi;
 

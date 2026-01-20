@@ -22,6 +22,10 @@ import { ComprasListHeader } from "./components/ComprasListHeader"
 import type { ComprasFilterChip } from "./components/ComprasListHeader"
 import { ComprasFiltersDrawer, type ComprasFiltersDraft } from "./components/ComprasFiltersDrawer"
 import { ComprasDetailDrawer } from "./components/ComprasDetailDrawer"
+import ProviderSearchAutocomplete from "../products/components/ProviderSearchAutocomplete"
+import CompraProductSearchAutocomplete from "./components/CompraProductSearchAutocomplete"
+import CompraCartTable from "./components/CompraCartTable"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog"
 
 import type { CompraDetailRecord, CompraListRecord } from "./compra.types"
 import { compraClient } from "./compra.client"
@@ -37,6 +41,9 @@ type ProductoOption = {
   id_producto: number
   nombre_producto: string
   codigo_producto: string
+  precio_compra?: number
+  cantidad_stock?: number
+  costo?: number
 }
 
 const PAGE_SIZE_STORAGE_KEY = "compras.pageSize"
@@ -71,6 +78,7 @@ const compraSchema = z.object({
     .max(255, "Máximo 255 caracteres")
     .optional()
     .or(z.literal("")),
+  aplicar_iva: z.boolean().optional(),
   detalle: z.array(detalleSchema).min(1, "Agrega al menos un producto al detalle"),
 })
 
@@ -95,13 +103,7 @@ type ApiErrorResponse = {
 const defaultValues: CompraFormValues = {
   id_proveedor: 0,
   observacion: "",
-  detalle: [
-    {
-      id_producto: 0,
-      cantidad: 1,
-      costo_unitario: 0,
-    },
-  ],
+  detalle: [],
 }
 
 // Mantenemos todas las cifras de compra en USD con 2 decimales.
@@ -226,13 +228,20 @@ export default function ComprasPage() {
     queryKey: ["productos-catalogo"],
     enabled: isAdmin,
     queryFn: async () => {
-      const { data } = await api.get<ProductoOption[]>("/producto")
+      const { data } = await api.get<ProductoOption[]>('/producto')
       if (!Array.isArray(data)) return []
-      return data.map((item: ProductoOption) => ({
-        id_producto: item.id_producto,
-        nombre_producto: item.nombre_producto,
-        codigo_producto: item.codigo_producto,
-      }))
+      type Incoming = Partial<{ id_producto: number; nombre_producto: string; codigo_producto: string; precio_compra: number; costo: number; cantidad_stock: number; stock: number }>
+      return data.map((item: Incoming) => {
+        const precio_compra = typeof item.precio_compra === 'number' ? item.precio_compra : (typeof item.costo === 'number' ? item.costo : 0)
+        const cantidad_stock = typeof item.cantidad_stock === 'number' ? item.cantidad_stock : (typeof item.stock === 'number' ? item.stock : undefined)
+        return {
+          id_producto: item.id_producto ?? 0,
+          nombre_producto: item.nombre_producto ?? '',
+          codigo_producto: item.codigo_producto ?? '',
+          precio_compra,
+          cantidad_stock,
+        }
+      })
     },
   })
 
@@ -392,8 +401,61 @@ export default function ComprasPage() {
     },
   })
 
-  // Handler compartido tanto para crear desde cero como para duplicar futuras compras.
+  // Validaciones antes de submit y handler compartido para crear/editar.
+  const validateBeforeSubmit = (values: CompraFormValues) => {
+    // Proveedor obligatorio
+    if (!values.id_proveedor || values.id_proveedor === 0) {
+        form.setError("id_proveedor" as const, { type: "required", message: "Selecciona un proveedor" })
+        setFormError("Selecciona un proveedor")
+        toast.error("Selecciona un proveedor")
+      return false
+    }
+
+    const detalle = Array.isArray(values.detalle) ? values.detalle : []
+    if (detalle.length === 0) {
+      toast.error("Agrega al menos 1 producto")
+      form.setError("detalle" as const, { type: "required", message: "Agrega al menos un producto al detalle" })
+      return false
+    }
+
+    // Recorremos líneas y validamos campos
+    let anyValidProduct = false
+    for (let i = 0; i < detalle.length; i++) {
+      const line = detalle[i]
+      if (!line || !line.id_producto || line.id_producto === 0) {
+        form.setError(`detalle.${i}.id_producto` as const, { type: "required", message: "Selecciona un producto" })
+        // no hacemos return inmediato para marcar todas las líneas inválidas
+        continue
+      }
+      anyValidProduct = true
+
+      if (!Number.isFinite(Number(line.cantidad)) || Number(line.cantidad) <= 0) {
+        form.setError(`detalle.${i}.cantidad` as const, { type: "validate", message: "Cantidad mínima 1" })
+        toast.error(`Cantidad mínima 1 en la línea ${i + 1}`)
+        return false
+      }
+
+      if (!Number.isFinite(Number(line.costo_unitario)) || Number(line.costo_unitario) <= 0) {
+        form.setError(`detalle.${i}.costo_unitario` as const, { type: "validate", message: "Costo inválido" })
+        toast.error(`Costo inválido en la línea ${i + 1}`)
+        return false
+      }
+    }
+
+    if (!anyValidProduct) {
+      toast.error("Agrega al menos un producto válido")
+      return false
+    }
+
+    // Passed all validations
+    setFormError(null)
+    return true
+  }
+
   const onSubmit = form.handleSubmit((values) => {
+    // Validar antes de llamar a la API
+    if (!validateBeforeSubmit(values)) return
+
     if (dialogMode === "edit") {
       if (editId === null) {
         setFormError("No se encontró la compra a editar")
@@ -402,6 +464,7 @@ export default function ComprasPage() {
       updateMutation.mutate({ id: editId, payload: buildPayload(values) })
       return
     }
+
     createMutation.mutate(buildPayload(values))
   })
 
@@ -452,8 +515,50 @@ export default function ComprasPage() {
   }
 
   const compras = useMemo(() => comprasQuery.data ?? [], [comprasQuery.data])
-  const proveedores = proveedoresQuery.data ?? []
-  const productos = productosQuery.data ?? []
+  const proveedores = useMemo(() => proveedoresQuery.data ?? [], [proveedoresQuery.data])
+  const productos = useMemo(() => productosQuery.data ?? [], [productosQuery.data])
+
+  const idProveedorWatch = form.watch("id_proveedor")
+  const detalleValuesWatch = form.watch("detalle")
+
+  const [providerInput, setProviderInput] = useState<string>(() => {
+    const id = form.getValues("id_proveedor")
+    const p = proveedores.find((x) => x.id_proveedor === id)
+    return p?.nombre_proveedor ?? ""
+  })
+
+  useEffect(() => {
+    const p = proveedores.find((x) => x.id_proveedor === idProveedorWatch)
+    setProviderInput(p?.nombre_proveedor ?? "")
+  }, [proveedores, idProveedorWatch])
+
+  // visible input per detalle row
+  const [, setSearchInputs] = useState<string[]>(() => {
+    const det = (form.getValues("detalle") as DetalleCompra[]) || []
+    return det.map((it) => {
+      const prod = productos.find((p) => p.id_producto === it.id_producto)
+      return prod?.nombre_producto ?? ""
+    })
+  })
+
+  useEffect(() => {
+    const det = form.getValues("detalle") || []
+    setSearchInputs((prev) => {
+      const next = [...prev]
+      // adjust length
+      while (next.length < det.length) next.push("")
+      while (next.length > det.length) next.pop()
+      // fill missing names from catalog
+      for (let i = 0; i < det.length; i++) {
+        if (!next[i]) {
+          const prod = productos.find((p) => p.id_producto === det[i]?.id_producto)
+          next[i] = prod?.nombre_producto ?? ""
+        }
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productos, detalleValuesWatch])
 
   // Lógica de filtrado y búsqueda
   const filteredCompras = useMemo(() => {
@@ -553,6 +658,8 @@ export default function ComprasPage() {
   )
 
   const detalleValues = form.watch("detalle")
+  const aplicarIva = form.watch("aplicar_iva")
+
   const totals = useMemo(() => {
     const items = Array.isArray(detalleValues) ? detalleValues : []
     let subtotal = 0
@@ -561,10 +668,10 @@ export default function ComprasPage() {
         subtotal += item.cantidad * item.costo_unitario
       }
     })
-    const impuesto = Number((subtotal * IVA_RATE).toFixed(2))
+    const impuesto = aplicarIva ? Number((subtotal * IVA_RATE).toFixed(2)) : 0
     const total = Number((subtotal + impuesto).toFixed(2))
     return { subtotal, impuesto, total }
-  }, [detalleValues])
+  }, [detalleValues, aplicarIva])
 
   if (!isAdmin) {
     return (
@@ -927,189 +1034,185 @@ export default function ComprasPage() {
         </div>
       </section>
 
-      {dialogOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-        >
-          <div
-            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-8 sm:p-10"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold text-slate-900">
-                {dialogMode === "edit" ? "Editar compra" : "Registrar compra"}
-              </h2>
-              <p className="text-sm text-slate-600">
-                {dialogMode === "edit"
-                  ? "Actualiza cabecera y productos asociados."
-                  : "Los movimientos actualizarán stock y kardex automáticamente."}
-              </p>
-            </div>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(next) => {
+          // Bloqueado por diseño: no cerrar por overlay/ESC.
+          if (!next) return
+          setDialogOpen(true)
+        }}
+      >
+        <DialogContent className="dialog-content w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl" disableOutsideClose hideCloseButton>
+          <div className="flex h-[95vh] flex-col">
+            <DialogHeader className="border-b px-8 py-6 text-left flex-shrink-0">
+              <DialogTitle className="text-2xl font-semibold text-slate-900">{dialogMode === "edit" ? "Editar compra" : "Registrar compra"}</DialogTitle>
+              <p className="text-sm text-slate-600">{dialogMode === "edit" ? "Actualiza cabecera y productos asociados." : "Los movimientos actualizarán stock y kardex automáticamente."}</p>
+            </DialogHeader>
 
-          {formError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formError}</div>
-          )}
+            {formError && (
+              <div className="mx-8 mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex-shrink-0">{formError}</div>
+            )}
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-8">
+            <form onSubmit={onSubmit} className="flex flex-1 flex-col overflow-hidden">
+              <div className="flex-1 overflow-hidden flex flex-col">
+                  {/* Top bar: proveedor - empty - observacion (clonado de ventas) */}
+                  <div className="border-b border-slate-200 bg-white px-8 py-6">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div>
+                        <label className="text-xs font-medium uppercase text-slate-500">Proveedor</label>
+                        <div className="mt-1">
+                          <ProviderSearchAutocomplete
+                            proveedores={proveedores}
+                            value={providerInput}
+                            onSelect={(prov) => {
+                              if (prov) {
+                                form.setValue("id_proveedor", prov.id_proveedor, { shouldValidate: true })
+                                setProviderInput(prov.nombre_proveedor)
+                              } else {
+                                form.setValue("id_proveedor", 0, { shouldValidate: true })
+                                setProviderInput("")
+                              }
+                            }}
+                            disabled={proveedoresQuery.isLoading}
+                          />
+                          {form.formState.errors.id_proveedor && (
+                            <p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
+                          )}
+                        </div>
+                      </div>
 
-            <div className="mt-4 space-y-5">
+                      <div>
+                        {/* empty center column to match ventas layout */}
+                      </div>
 
-
-              <div>
-                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-Proveedor</label>
-                <select
-                  {...form.register("id_proveedor", { valueAsNumber: true })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  disabled={proveedoresQuery.isLoading}
-                >
-                  <option value={0}>Selecciona un proveedor</option>
-                  {proveedores.map((prov: ProveedorOption) => (
-                    <option key={prov.id_proveedor} value={prov.id_proveedor}>
-                      {prov.nombre_proveedor}
-                    </option>
-                  ))}
-                </select>
-                {form.formState.errors.id_proveedor && (
-                  <p className="mt-1 text-xs text-red-600">{form.formState.errors.id_proveedor.message}</p>
-                )}
-              </div>
-              <div>
-                <label className="text-xs font-medium uppercase text-slate-500">Observación</label>
-                <input
-                  {...form.register("observacion")}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  placeholder="Ej. Compra inicial"
-                />
-                {form.formState.errors.observacion && (
-                  <p className="mt-1 text-xs text-red-600">{form.formState.errors.observacion.message}</p>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium uppercase text-slate-500">Detalle de productos</label>
-                <button
-                  type="button"
-                  onClick={() => detalleFieldArray.append({ id_producto: 0, cantidad: 1, costo_unitario: 0 })}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:border-slate-300"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Añadir
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-3">
-                {detalleFieldArray.fields.map((field, index) => (
-                  <div key={field.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[2fr,1fr,1fr,auto]">
-                    <div>
-                      <label className="text-[11px] font-medium uppercase text-slate-500">Producto</label>
-                      <select
-                        {...form.register(`detalle.${index}.id_producto` as const, { valueAsNumber: true })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                        disabled={productosQuery.isLoading}
-                      >
-                        <option value={0}>Selecciona un producto</option>
-                        {productos.map((prod: ProductoOption) => (
-                          <option key={prod.id_producto} value={prod.id_producto}>
-                            {prod.nombre_producto}
-                          </option>
-                        ))}
-                      </select>
-                      {form.formState.errors.detalle?.[index]?.id_producto && (
-                        <p className="mt-1 text-xs text-red-600">
-                          {form.formState.errors.detalle[index]?.id_producto?.message}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-medium uppercase text-slate-500">Cantidad</label>
-                      <input
-                        type="number"
-                        step={1}
-                        {...form.register(`detalle.${index}.cantidad` as const, { valueAsNumber: true })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                      {form.formState.errors.detalle?.[index]?.cantidad && (
-                        <p className="mt-1 text-xs text-red-600">
-                          {form.formState.errors.detalle[index]?.cantidad?.message}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-medium uppercase text-slate-500">Costo unitario</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        {...form.register(`detalle.${index}.costo_unitario` as const, { valueAsNumber: true })}
-                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                      />
-                      {form.formState.errors.detalle?.[index]?.costo_unitario && (
-                        <p className="mt-1 text-xs text-red-600">
-                          {form.formState.errors.detalle[index]?.costo_unitario?.message}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end justify-between">
-                      <p className="text-xs font-semibold text-slate-600">
-                        {currency.format(
-                          (detalleValues?.[index]?.cantidad || 0) * (detalleValues?.[index]?.costo_unitario || 0)
-                        )}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => detalleFieldArray.remove(index)}
-                        disabled={detalleFieldArray.fields.length === 1}
-                        className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:border-slate-300 disabled:opacity-50"
-                      >
-                        Quitar
-                      </button>
+                      <div>
+                        <label className="text-xs font-medium uppercase text-slate-500">Observaciones</label>
+                        <input
+                          type="text"
+                          {...form.register("observacion")}
+                          placeholder="Detalles adicionales (opcional)"
+                          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {form.formState.errors.detalle?.message && (
-                <p className="mt-2 text-xs text-red-600">{form.formState.errors.detalle.message}</p>
-              )}
-            </div>
+                  <div className="flex flex-1 overflow-hidden">
+                    {/* Left panel */}
+                    <div className="flex w-[70%] flex-col border-r border-slate-200 bg-white overflow-hidden">
+                      <div className="border-b border-slate-200 px-8 py-6 flex-shrink-0">
+                        <CompraProductSearchAutocomplete
+                          productos={productos}
+                          onSelect={(prod) => {
+                            if (!prod) return
+                            const det = form.getValues("detalle") as DetalleCompra[]
+                            const idx = det.findIndex((d) => d.id_producto === prod.id_producto)
+                            const suggestedCosto = prod.precio_compra ?? prod.costo ?? 0
+                            if (idx >= 0) {
+                              const current = det[idx]
+                              form.setValue(`detalle.${idx}.cantidad`, (current.cantidad || 0) + 1, { shouldValidate: true })
+                            } else {
+                              detalleFieldArray.append({ id_producto: prod.id_producto, cantidad: 1, costo_unitario: suggestedCosto > 0 ? suggestedCosto : 0 })
+                            }
+                          }}
+                          value=""
+                          disabled={productosQuery.isLoading}
+                        />
+                      </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <div className="flex items-center justify-between">
-                <span>Subtotal</span>
-                <span>{currency.format(totals.subtotal)}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>IVA (15 %)</span>
-                <span>{currency.format(totals.impuesto)}</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-base font-semibold text-slate-900">
-                <span>Total</span>
-                <span>{currency.format(totals.total)}</span>
-              </div>
-            </div>
+                      <div className="flex-1 overflow-y-auto px-8 py-6">
+                        <CompraCartTable
+                          items={form.getValues("detalle") as DetalleCompra[]}
+                          productosMap={new Map(productos.map((p) => [p.id_producto, p]))}
+                          onIncrement={(index) => {
+                            const det = form.getValues("detalle") as DetalleCompra[]
+                            form.setValue(`detalle.${index}.cantidad`, (det[index].cantidad || 0) + 1, { shouldValidate: true })
+                          }}
+                          onDecrement={(index) => {
+                            const det = form.getValues("detalle") as DetalleCompra[]
+                            const next = Math.max(1, (det[index].cantidad || 1) - 1)
+                            form.setValue(`detalle.${index}.cantidad`, next, { shouldValidate: true })
+                          }}
+                          onRemove={(index) => {
+                            detalleFieldArray.remove(index)
+                          }}
+                          onCostoChange={(index, next) => {
+                            form.setValue(`detalle.${index}.costo_unitario`, Number(next), { shouldValidate: true })
+                          }}
+                        />
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={closeDialog}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                disabled={!form.formState.isValid || createMutation.isPending || updateMutation.isPending || (dialogMode === "edit" && compraEditQuery.isLoading)}
-              >
-                {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
-                {dialogMode === "edit" ? "Guardar" : "Registrar"}
-              </button>
-            </div>
-          </form>
+                        {form.formState.errors.detalle?.message && (
+                          <p className="mt-2 text-xs text-red-600">{form.formState.errors.detalle.message}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right panel 30% */}
+                    <div className="w-[30%]">
+                      <div className="flex h-full flex-col min-h-0 border-l border-slate-200 bg-slate-50">
+                        <div className="flex-1 p-4">
+                          <h3 className="text-sm font-semibold text-slate-700 mb-4">Resumen</h3>
+
+                          <div className="space-y-2.5 text-sm">
+                            <div className="flex justify-between text-slate-600">
+                              <span>Subtotal</span>
+                              <span className="tabular-nums font-medium">{currency.format(totals.subtotal)}</span>
+                            </div>
+
+                            <div className="mt-3 flex items-center justify-between">
+                              <label className="flex items-center gap-2 text-sm text-slate-700">
+                                <input type="checkbox" {...form.register("aplicar_iva")} className="h-4 w-4" />
+                                <span className="text-xs uppercase">Aplicar IVA (15%)</span>
+                              </label>
+                              <span className="text-xs text-slate-500">{aplicarIva ? "Activado" : "Desactivado"}</span>
+                            </div>
+
+                            <div className="flex justify-between text-slate-600">
+                              <span>IVA (15%)</span>
+                              <span className="tabular-nums font-medium">{currency.format(totals.impuesto)}</span>
+                            </div>
+
+                            <div className="border-t border-slate-200 my-2"></div>
+                            <div className="flex justify-between items-baseline text-slate-900">
+                              <span className="text-base font-bold">Total</span>
+                              <span className="text-2xl font-bold tabular-nums">{currency.format(totals.total)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="sticky bottom-0 border-t border-slate-200 bg-white px-4 py-4 shadow-lg space-y-2">
+                          <button
+                            type="submit"
+                            disabled={createMutation.isPending || updateMutation.isPending || (dialogMode === "edit" && compraEditQuery.isLoading) || !(form.formState.isValid)}
+                            className="flex w-full h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                          >
+                            {(createMutation.isPending || updateMutation.isPending) ? (
+                              <>
+                                <svg className="h-5 w-5 animate-spin" />
+                                Procesando...
+                              </>
+                            ) : (
+                              <>Registrar compra</>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={closeDialog}
+                            disabled={createMutation.isPending || updateMutation.isPending}
+                            className="w-full h-10 rounded-xl border border-slate-300 bg-white text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {detailId !== null && (
         <ComprasDetailDrawer

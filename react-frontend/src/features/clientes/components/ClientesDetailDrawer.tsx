@@ -88,8 +88,28 @@ export function ClientesDetailDrawer(props: Props) {
 													</span>
 													<span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 ring-1 ring-slate-200">
 														<Calendar className="h-3.5 w-3.5" />
-														Registrado: {props.dateFormatter.format(new Date(detailCliente.fecha_registro))}
+															Registrado: {(() => {
+																try {
+																	const d = new Date(detailCliente.fecha_registro)
+																	if (Number.isNaN(d.getTime())) return "—"
+																	return props.dateFormatter.format(d)
+																} catch {
+																	return "—"
+																}
+															})()}
 													</span>
+														<span className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 ring-1 ring-slate-200">
+															<Calendar className="h-3.5 w-3.5" />
+															Fecha de nacimiento: {detailCliente.fecha_nacimiento ? (() => {
+																try {
+																	const d = new Date(detailCliente.fecha_nacimiento)
+																	if (Number.isNaN(d.getTime())) return "No especificada"
+																	return props.dateFormatter.format(d)
+																} catch {
+																	return "No especificada"
+																}
+															})() : "No especificada"}
+														</span>
 												</div>
 											</div>
 										</div>

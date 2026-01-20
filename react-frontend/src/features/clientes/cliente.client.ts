@@ -10,16 +10,26 @@ export const clienteClient = {
 		return data.map((item) => ({
 			...item,
 			fecha_registro: item.fecha_registro || new Date().toISOString(),
+			fecha_nacimiento: item.fecha_nacimiento ?? null,
 		}))
 	},
 
 	async create(payload: ClientePayload): Promise<ClienteRecord> {
-		const { data } = await api.post<ClienteRecord>("/cliente", payload)
+		// Asegurar formato YYYY-MM-DD si existe
+		const body = { ...payload } as Partial<ClientePayload>
+		if (body.fecha_nacimiento) {
+			body.fecha_nacimiento = String(body.fecha_nacimiento).slice(0, 10)
+		}
+		const { data } = await api.post<ClienteRecord>("/cliente", body)
 		return data
 	},
 
 	async update(clienteId: number, payload: ClientePayload): Promise<ClienteRecord> {
-		const { data } = await api.put<ClienteRecord>(`/cliente/${clienteId}`, payload)
+		const body = { ...payload } as Partial<ClientePayload>
+		if (body.fecha_nacimiento) {
+			body.fecha_nacimiento = String(body.fecha_nacimiento).slice(0, 10)
+		}
+		const { data } = await api.put<ClienteRecord>(`/cliente/${clienteId}`, body)
 		return data
 	},
 

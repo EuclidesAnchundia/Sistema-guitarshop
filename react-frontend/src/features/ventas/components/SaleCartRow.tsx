@@ -14,6 +14,7 @@ type Props = {
   onIncrement: () => void
   onDecrement: () => void
   onRemove: () => void
+  disabled?: boolean
 }
 
 export function SaleCartRow({
@@ -26,6 +27,7 @@ export function SaleCartRow({
   onIncrement,
   onDecrement,
   onRemove,
+  disabled = false,
 }: Props) {
   return (
     <tr className="group border-b border-slate-100 hover:bg-slate-50">
@@ -42,7 +44,7 @@ export function SaleCartRow({
           <button
             type="button"
             onClick={onDecrement}
-            disabled={quantity <= 1}
+            disabled={quantity <= 1 || disabled}
             className="inline-flex h-8 w-8 items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30"
           >
             <Minus className="h-3.5 w-3.5" />
@@ -56,7 +58,7 @@ export function SaleCartRow({
           <button
             type="button"
             onClick={onIncrement}
-            disabled={stock !== null && quantity >= stock}
+            disabled={disabled || (stock !== null && quantity >= stock)}
             className="inline-flex h-8 w-8 items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30"
           >
             <Plus className="h-3.5 w-3.5" />
@@ -76,7 +78,8 @@ export function SaleCartRow({
         <button
           type="button"
           onClick={onRemove}
-          className="inline-flex h-8 w-8 items-center justify-center rounded text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+          disabled={disabled}
+          className="inline-flex h-8 w-8 items-center justify-center rounded text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100 disabled:opacity-30"
         >
           <Trash2 className="h-4 w-4" />
         </button>

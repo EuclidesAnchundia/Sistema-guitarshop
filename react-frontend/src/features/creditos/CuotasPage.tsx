@@ -5,7 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Eye, DollarSign, Download, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../../components/ui/dialog"
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "../../components/ui/drawer"
+import { Dialog, DialogContent } from "../../components/ui/dialog"
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { creditsApi } from "../../services/creditsApi"
 import { formatMoney } from "../../utils/number"
@@ -18,9 +19,9 @@ type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
 const DEFAULT_PAGE_SIZE: PageSizeOption = 20
 
 const installmentStatusClasses: Record<string, string> = {
-  PENDIENTE: "bg-amber-100 text-amber-800",
-  VENCIDA: "bg-red-100 text-red-800",
-  PAGADA: "bg-emerald-100 text-emerald-800",
+  PENDIENTE: "bg-slate-100 text-slate-700",
+  VENCIDA: "bg-slate-100 text-slate-700",
+  PAGADA: "bg-slate-100 text-slate-700",
 }
 
 type Installment = {
@@ -154,16 +155,55 @@ export default function CuotasPage() {
 
   const [selectedInstallment, setSelectedInstallment] = useState<Installment | null>(null)
   const [pagoDialogOpen, setPagoDialogOpen] = useState(false)
-  const pagarMutation = useMutation<void, unknown, { installmentId: number; amount: number }>({
-    mutationFn: async ({ installmentId, amount }: { installmentId: number; amount: number }) => {
-      await creditsApi.payInstallment(installmentId, { amount })
+  const [confirmPayload, setConfirmPayload] = useState<{ amount: number } | null>(null)
+  const pagarMutation = useMutation<void, unknown, { installmentId: number; amount: number; paidAt?: string }>({
+    mutationFn: async ({ installmentId, amount, paidAt }: { installmentId: number; amount: number; paidAt?: string }) => {
+      await creditsApi.payInstallment(installmentId, { amount, paidAt })
       return
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["cuotas"] })
-      await queryClient.invalidateQueries({ queryKey: ["creditos"] })
+      // Invalidar cualquier query que comience con 'cuotas' o 'creditos'
+      await queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === "cuotas" })
+      await queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === "creditos" })
+      if (detailId) await queryClient.invalidateQueries({ queryKey: ["credito", detailId] })
+      // Si pagamos desde la lista y conocemos el creditId de la cuota, invalidar también ese detalle
+      const paidCreditId = selectedInstallment?.creditId
+      if (paidCreditId) {
+        // Actualizar la caché local del detalle para mostrar el pago inmediatamente
+        queryClient.setQueryData(["credito", paidCreditId], (old: unknown) => {
+          if (!old) return old
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const copy = JSON.parse(JSON.stringify(old as unknown)) as any
+            const installment = copy.installments?.find((it: unknown) => (it as { id?: number }).id === selectedInstallment?.id)
+            if (installment) {
+              installment.status = "PAGADA"
+              installment.paidAmount = (installment.paidAmount ?? 0) + (confirmPayload?.amount ?? 0)
+              installment.paidAt = new Date().toISOString()
+            }
+            // ajustar saldo pendiente del crédito si existe
+            if (typeof copy.saldoPendiente === "number") {
+              copy.saldoPendiente = Math.max(0, copy.saldoPendiente - (confirmPayload?.amount ?? 0))
+            }
+            // Si el saldo queda en 0, marcar crédito como CANCELADO para actualizar estado y acciones
+            if (typeof copy.saldoPendiente === "number" && copy.saldoPendiente <= 0) {
+              copy.status = "CANCELADO"
+            }
+            return copy
+          } catch {
+            return old
+          }
+        })
+        await queryClient.invalidateQueries({ queryKey: ["credito", paidCreditId] })
+      }
       setPagoDialogOpen(false)
       setSelectedInstallment(null)
+      setConfirmPayload(null)
+      // Generar/descargar PDF del crédito relacionado
+      try {
+        const target = detailId ?? selectedInstallment?.creditId
+        if (target) exportSinglePdfMutation.mutate(target)
+      } catch { /* ignore */ }
     },
     onError: () => toast.error("No se pudo registrar el pago."),
   })
@@ -198,43 +238,8 @@ export default function CuotasPage() {
     onError: () => toast.error("No se pudo exportar el crédito."),
   })
 
-  if (!isAdmin) {
-    return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
-        <div className="flex items-center gap-3 text-amber-800">
-          <div className="h-5 w-5" />
-          <div>
-            <p className="font-semibold">Acceso restringido</p>
-            <p className="text-sm">Solo usuarios con rol ADMIN pueden ver esta vista.</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
-      <section aria-labelledby="cuotas-encabezado" className="rounded-3xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <p id="cuotas-encabezado" className="text-xs font-semibold uppercase tracking-wide text-slate-500">CUOTAS</p>
-            <h1 className="mt-1 text-3xl font-semibold text-slate-900">Cuotas</h1>
-            <p className="mt-1 text-sm text-slate-500">Listado de cuotas, pagos y vencimientos.</p>
-          </div>
-
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones rápidas</p>
-            <button
-              type="button"
-              onClick={() => setPagoDialogOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
-            >
-              <DollarSign className="h-4 w-4" />
-              Registrar pago
-            </button>
-          </div>
-        </div>
-      </section>
 
       <section aria-labelledby="cuotas-resumen" className="space-y-3">
         <div className="flex items-center justify-between">
@@ -253,7 +258,7 @@ export default function CuotasPage() {
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-5">
             <p className="text-xs uppercase text-slate-500">Cuotas pagadas</p>
-            <p className="mt-2 text-3xl font-semibold text-emerald-700">{installments.filter((i: Installment) => i.status === "PAGADA").length}</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">{installments.filter((i: Installment) => i.status === "PAGADA").length}</p>
             <p className="text-sm text-slate-500">Registradas</p>
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -395,75 +400,135 @@ export default function CuotasPage() {
         onClearDraft={() => setFiltersDraft({ status: "all", dateFrom: null, dateTo: null })}
       />
 
-      <Dialog open={detailId !== null} onOpenChange={(open) => { if (!open) setDetailId(null) }}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalle de crédito</DialogTitle>
-            <DialogDescription>Información del crédito y sus cuotas.</DialogDescription>
-          </DialogHeader>
-          {detailQuery.isLoading && <div className="p-4 text-slate-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Cargando...</div>}
-          {detailQuery.data && (
-            <div className="space-y-4 px-4 pb-6">
-              <p className="font-semibold">{detailQuery.data.saleCode || `Crédito #${detailQuery.data.id}`}</p>
-              <p className="text-sm text-slate-500">Cliente: {detailQuery.data.cliente.nombres} {detailQuery.data.cliente.apellidos}</p>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Cuota</th>
-                      <th className="px-4 py-3 text-left">Vencimiento</th>
-                      <th className="px-4 py-3 text-left">Monto</th>
-                      <th className="px-4 py-3 text-left">Saldo</th>
-                      <th className="px-4 py-3 text-left">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {detailQuery.data.installments.map((c) => (
-                      <tr key={c.id}>
-                        <td className="px-4 py-3">#{c.number}</td>
-                        <td className="px-4 py-3">{formatDate(c.dueDate)}</td>
-                        <td className="px-4 py-3 font-semibold">{formatMoney(c.amount)}</td>
-                        <td className="px-4 py-3 font-semibold">{formatMoney(Math.max(c.amount - c.paidAmount, 0))}</td>
-                        <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${installmentStatusClasses[c.status] ?? "bg-slate-100 text-slate-700"}`}>{c.status}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      <Drawer open={detailId !== null} onOpenChange={(open) => { if (!open) setDetailId(null) }}>
+        <DrawerContent className="overflow-hidden">
+            <div className="flex h-dvh flex-col">
+              <DrawerHeader>
+                <DrawerTitle className="pr-10">Detalle de crédito</DrawerTitle>
+                <DrawerDescription>Información del crédito y sus cuotas.</DrawerDescription>
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { if (detailQuery.data) exportSinglePdfMutation.mutate(detailQuery.data.id) }}
+                    disabled={exportingKey !== null || exportSinglePdfMutation.isPending}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar PDF
+                  </button>
+                  <button type="button" onClick={() => setDetailId(null)} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600">Cerrar</button>
+                </div>
+              </DrawerHeader>
+
+              <div className="flex-1 space-y-6 overflow-y-auto overflow-x-hidden px-6 py-5">
+              {detailQuery.isLoading && <div className="p-4 text-slate-500 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Cargando...</div>}
+              {detailQuery.data && (
+                <div className="space-y-4">
+                  <p className="font-semibold">{detailQuery.data.saleCode || `Crédito #${detailQuery.data.id}`}</p>
+                  <p className="text-sm text-slate-500">Cliente: {detailQuery.data.cliente.nombres} {detailQuery.data.cliente.apellidos}</p>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3 text-left">Cuota</th>
+                          <th className="px-4 py-3 text-left">Vencimiento</th>
+                          <th className="px-4 py-3 text-left">Monto</th>
+                          <th className="px-4 py-3 text-left">Saldo</th>
+                          <th className="px-4 py-3 text-left">Estado</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {detailQuery.data.installments.map((c) => (
+                          <tr key={c.id}>
+                            <td className="px-4 py-3">#{c.number}</td>
+                            <td className="px-4 py-3">{formatDate(c.dueDate)}</td>
+                            <td className="px-4 py-3 font-semibold">{formatMoney(c.amount)}</td>
+                            <td className="px-4 py-3 font-semibold">{formatMoney(Math.max(c.amount - c.paidAmount, 0))}</td>
+                            <td className="px-4 py-3"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${installmentStatusClasses[c.status] ?? "bg-slate-100 text-slate-700"}`}>{c.status}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </div>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Diálogo de pago: resumen sólo lectura — aceptar o cancelar */}
 
       <Dialog open={pagoDialogOpen && !!selectedInstallment} onOpenChange={(open) => { if (!open) { setPagoDialogOpen(false); setSelectedInstallment(null) } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registrar pago</DialogTitle>
-            <DialogDescription>Registra el pago de la cuota seleccionada.</DialogDescription>
-          </DialogHeader>
-          {selectedInstallment && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                <p className="font-semibold text-slate-900">{selectedInstallment.creditoLabel}</p>
-                <p className="text-xs text-slate-500">Cuota #{selectedInstallment.number}</p>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span>Monto original</span>
-                  <strong>{formatMoney(selectedInstallment.amount)}</strong>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Saldo pendiente</span>
-                  <strong className="text-emerald-700">{formatMoney(Math.max(selectedInstallment.amount - selectedInstallment.paidAmount, 0))}</strong>
-                </div>
-              </div>
-
-              <form onSubmit={(e) => { e.preventDefault(); pagarMutation.mutate({ installmentId: selectedInstallment.id, amount: Math.max(selectedInstallment.amount - selectedInstallment.paidAmount, 0) }) }} className="space-y-4">
-                <div className="flex justify-end gap-2">
-                  <button type="button" onClick={() => { setPagoDialogOpen(false); setSelectedInstallment(null) }} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancelar</button>
-                  <button type="submit" disabled={pagarMutation.status === "pending"} className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">{pagarMutation.status === "pending" && <Loader2 className="h-4 w-4 animate-spin"/>} Registrar pago</button>
-                </div>
-              </form>
+        <DialogContent className="dialog-content w-full max-w-6xl overflow-hidden p-0 sm:rounded-3xl" disableOutsideClose hideCloseButton>
+          <div className="flex h-[75vh] flex-col">
+            <div className="border-b px-8 py-6 text-left">
+              <h2 className="text-2xl font-semibold text-slate-900">Registrar pago</h2>
+              <p className="text-sm text-slate-600">Resumen del pago. Solo puedes Aceptar o Cancelar.</p>
             </div>
-          )}
+
+            <div className="flex-1 overflow-y-auto px-8 py-6">
+              {selectedInstallment && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="md:col-span-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 text-base text-slate-700">
+                      <p className="font-semibold text-slate-900 text-lg truncate">{selectedInstallment.creditoLabel}</p>
+                      <p className="text-sm text-slate-700 mt-1">{selectedInstallment.clienteLabel}</p>
+                      <p className="text-xs text-slate-700 mt-1">Cuota #{selectedInstallment.number}</p>
+                      <p className="text-xs text-slate-700">Vencimiento: {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate) : "—"}</p>
+
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs uppercase text-slate-500">Monto original</p>
+                          <p className="text-lg font-semibold text-slate-900">{formatMoney(selectedInstallment.amount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs uppercase text-slate-500">Saldo pendiente</p>
+                          <p className="text-lg font-semibold text-slate-900">{formatMoney(Math.max(selectedInstallment.amount - selectedInstallment.paidAmount, 0))}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 md:col-span-1 flex flex-col">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-700">
+                      <p className="text-xs text-slate-700">Detalle</p>
+                      <p className="font-semibold text-slate-900">ID: {selectedInstallment.id}</p>
+                      <p className="text-sm text-slate-700 mt-2">Crédito: {selectedInstallment.creditoLabel}</p>
+                      <div className="mt-4">
+                        <p className="text-xs text-slate-500">Acciones</p>
+                        <div className="mt-2 flex gap-2">
+                          <button onClick={() => { setPagoDialogOpen(false); setSelectedInstallment(null) }} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" aria-label="Cerrar">Cerrar</button>
+                          <button onClick={() => { if (typeof selectedInstallment.creditId === 'number') exportSinglePdfMutation.mutate(selectedInstallment.creditId) }} className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" aria-label="Exportar PDF">Exportar PDF</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-700">
+                      <p className="text-xs text-slate-700">Información</p>
+                      <p className="text-sm text-slate-700 mt-2">Este pago se registrará con la fecha del día. Se actualizará el estado de la cuota a PAGADA.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-shrink-0 border-t px-8 py-4 flex justify-end gap-3">
+              <button type="button" onClick={() => { setPagoDialogOpen(false); setSelectedInstallment(null) }} className="rounded-xl border border-slate-300 px-6 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cerrar</button>
+              <button
+                onClick={() => {
+                  if (!selectedInstallment) return
+                  const amount = Math.max(selectedInstallment.amount - (selectedInstallment.paidAmount ?? 0), 0)
+                  pagarMutation.mutate({ installmentId: selectedInstallment.id, amount, paidAt: new Date().toISOString() })
+                }}
+                disabled={pagarMutation.status === "pending"}
+                className="rounded-xl btn-primary px-6 py-2.5 text-sm"
+              >
+                {pagarMutation.status === "pending" && <Loader2 className="h-4 w-4 animate-spin inline-block mr-2"/>}
+                Aceptar pago
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

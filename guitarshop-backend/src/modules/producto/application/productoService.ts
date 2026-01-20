@@ -350,6 +350,7 @@ export async function obtenerProductoPorId(id: number) {
 // ==========================
 export async function crearProducto(data: {
   codigo_producto: string;
+  categoria?: string;
   nombre_producto: string;
   descripcion?: string | null;
   id_proveedor?: number | null;
@@ -362,33 +363,48 @@ export async function crearProducto(data: {
   if (!data.id_proveedor) {
     throw new Error("PROVEEDOR_REQUERIDO");
   }
-
   try {
-    const producto = await prisma.producto.create({
-      data: {
-        codigo_producto: data.codigo_producto,
-        nombre_producto: data.nombre_producto,
-        descripcion: data.descripcion ?? null,
-        id_proveedor: data.id_proveedor,
-        precio_compra: data.precio_compra,
-        precio_venta: data.precio_venta,
-        cantidad_stock: data.cantidad_stock ?? 0,
-        stock_minimo: data.stock_minimo ?? 0,
-        id_estado: 1,
-        id_usuario_modifi: data.id_usuario_modifi ?? null,
-      },
-      select: {
-        ...productoSelect,
-        proveedor: {
-          select: {
-            id_proveedor: true,
-            nombre_proveedor: true,
+    const result = await prisma.$transaction(async (tx) => {
+      // Si no viene código, generarlo en backend (PRD-000001...)
+      let codigo = data.codigo_producto && data.codigo_producto.trim() ? data.codigo_producto.trim() : "";
+      if (!codigo) {
+        const { default: codeService } = await import("../../../../lib/services/codeService");
+        const prefix = data.categoria && String(data.categoria).trim() ? String(data.categoria).trim().toUpperCase() : undefined;
+        if (prefix) {
+          codigo = await codeService.generateProductCode(tx, prefix);
+        } else {
+          codigo = await codeService.generateProductCode(tx);
+        }
+      }
+
+      const producto = await tx.producto.create({
+        data: {
+          codigo_producto: codigo,
+          nombre_producto: data.nombre_producto,
+          descripcion: data.descripcion ?? null,
+          id_proveedor: data.id_proveedor,
+          precio_compra: data.precio_compra,
+          precio_venta: data.precio_venta,
+          cantidad_stock: data.cantidad_stock ?? 0,
+          stock_minimo: data.stock_minimo ?? 0,
+          id_estado: 1,
+          id_usuario_modifi: data.id_usuario_modifi ?? null,
+        },
+        select: {
+          ...productoSelect,
+          proveedor: {
+            select: {
+              id_proveedor: true,
+              nombre_proveedor: true,
+            },
           },
         },
-      },
+      });
+
+      return producto;
     });
 
-    return producto;
+    return result;
   } catch (error: unknown) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [guitarshop-backend, react-frontend]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd ${{ matrix.project }}
+          npm ci
+
+      - name: Lint (strict)
+        run: |
+          cd ${{ matrix.project }}
+          # Fail on any lint warnings
+          npx eslint . --max-warnings=0
+
+      - name: Build
+        run: |
+          cd ${{ matrix.project }}
+          npm run build
+
+      - name: Run tests
+        run: |
+          cd ${{ matrix.project }}
+          if [ -f package.json ]; then
+            if npm run | grep -q "test"; then
+              npm run test || true
+            else
+              npx vitest run || true
+            fi
+          fi

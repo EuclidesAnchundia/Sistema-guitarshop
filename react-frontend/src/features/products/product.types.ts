@@ -108,6 +108,7 @@ export type ProductoPayload = {
 	precio_venta: number
 	cantidad_stock: number
 	stock_minimo: number
+	categoria?: string
 }
 
 export type KardexMovimientoRecord = {
