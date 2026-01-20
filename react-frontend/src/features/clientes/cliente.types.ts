@@ -6,6 +6,7 @@ export type ClienteRecord = {
 	correo: string | null
 	telefono: string | null
 	direccion: string | null
+	fecha_nacimiento?: string | null
 	fecha_registro: string
 }
 
@@ -29,4 +30,5 @@ export type ClientePayload = {
 	correo: string | null
 	telefono: string | null
 	direccion: string | null
+	fecha_nacimiento?: string | null
 }

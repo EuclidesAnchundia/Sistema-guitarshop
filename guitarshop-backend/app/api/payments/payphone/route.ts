@@ -12,8 +12,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => null);
     if (!body) return jsonCors({ error: "Body inválido" }, { status: 400 });
 
-    const { id_credito, id_cuota, amount, currency, id_usuario, metadata } = body as {
+    const { id_credito, id_factura, id_cuota, amount, currency, id_usuario, metadata } = body as {
       id_credito?: number;
+      id_factura?: number;
       id_cuota?: number | null;
       amount?: number | string;
       currency?: string | null;
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
       metadata?: unknown;
     };
 
-    if (!id_credito) return jsonCors({ error: "id_credito es requerido" }, { status: 400 });
+    if (!id_credito && !id_factura) return jsonCors({ error: "id_credito o id_factura es requerido" }, { status: 400 });
     if (amount === undefined || amount === null) return jsonCors({ error: "amount es requerido" }, { status: 400 });
 
     const parsedAmount = Number(amount);
@@ -31,7 +32,8 @@ export async function POST(req: Request) {
 
     // Crear registro payment en estado PENDING
     const { payment, provider_reference, idempotency_key } = await createPayment({
-      id_credito: Number(id_credito),
+      id_credito: id_credito ? Number(id_credito) : undefined,
+      id_factura: id_factura ? Number(id_factura) : undefined,
       id_cuota: id_cuota ? Number(id_cuota) : undefined,
       amount: parsedAmount,
       currency: currency ?? undefined,

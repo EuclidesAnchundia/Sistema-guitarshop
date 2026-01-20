@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../components/ui/drawer"
 import { productCategories } from "../../../config/productCategories"
 import SortFieldDirection from "../../../components/SortFieldDirection"
+import ProviderSearchAutocomplete from "./ProviderSearchAutocomplete"
 
 import type { ProductsFilters, ProveedorRecord } from "../product.types"
 
@@ -68,24 +69,34 @@ export function ProductsFiltersDrawer(props: Props) {
 
 						<div>
 							<label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Proveedor</label>
-							<select
-								value={String(props.filtersDraft.proveedorId)}
-								onChange={(event) => {
-									const raw = event.target.value
-									props.setFiltersDraft((prev) => ({
-										...prev,
-										proveedorId: raw === "all" ? "all" : Number(raw),
-									}))
-								}}
-								className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-							>
-								<option value="all">Todos</option>
-								{props.proveedores.map((prov) => (
-									<option key={prov.id_proveedor} value={prov.id_proveedor}>
-										{prov.nombre_proveedor}
-									</option>
-								))}
-							</select>
+							<div className="mt-1 flex items-center gap-2">
+								<div className="flex-1">
+									<ProviderSearchAutocomplete
+										proveedores={props.proveedores}
+										value={
+											props.filtersDraft.proveedorId === "all"
+												? ""
+												: (props.proveedores.find((p) => p.id_proveedor === (props.filtersDraft.proveedorId as number))?.nombre_proveedor ?? "")
+										}
+										onSelect={(prov) => {
+											props.setFiltersDraft((prev) => ({
+												...prev,
+												proveedorId: prov ? prov.id_proveedor : "all",
+											}))
+										}}
+									/>
+								</div>
+
+								{props.filtersDraft.proveedorId !== "all" && (
+									<button
+										type="button"
+										onClick={() => props.setFiltersDraft((prev) => ({ ...prev, proveedorId: "all" }))}
+										className="whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+									>
+										Limpiar
+									</button>
+								)}
+							</div>
 						</div>
 
 						<div>

@@ -60,6 +60,20 @@ export const POST = withErrorHandling(async (req: Request) => {
     id_usuario: auth.userId,
   });
 
+  // Obtener la cuota actualizada para devolverla al cliente
+  const cuotaActualizada = await prisma.cuota.findUnique({
+    where: { id_cuota: cuota.id_cuota },
+    select: {
+      id_cuota: true,
+      id_credito: true,
+      numero_cuota: true,
+      monto_cuota: true,
+      monto_pagado: true,
+      estado_cuota: true,
+      fecha_pago: true,
+    },
+  });
+
   return jsonCors(
     {
       message: "Cuota pagada correctamente",
@@ -69,6 +83,7 @@ export const POST = withErrorHandling(async (req: Request) => {
         status: resultado.credit.estado_credito,
         fechaFin: resultado.credit.fecha_fin,
       },
+      cuota: cuotaActualizada ?? null,
     },
     { status: 200 }
   );

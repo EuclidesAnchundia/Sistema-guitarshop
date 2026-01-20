@@ -59,6 +59,21 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
+    // Validar fecha_nacimiento si viene
+    if (body.fecha_nacimiento) {
+      const fecha = new Date(body.fecha_nacimiento);
+      const today = new Date();
+      // Normalizar horas para comparar solo fecha
+      fecha.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      if (isNaN(fecha.getTime())) {
+        return jsonCors({ error: "Fecha de nacimiento inválida" }, { status: 400 });
+      }
+      if (fecha > today) {
+        return jsonCors({ error: "La fecha de nacimiento no puede ser futura" }, { status: 400 });
+      }
+    }
+
     const cliente = await crearCliente({
       nombres: body.nombres,
       apellidos: body.apellidos,
@@ -66,6 +81,7 @@ export async function POST(req: Request) {
       correo: body.correo ?? null,
       telefono: body.telefono ?? null,
       direccion: body.direccion ?? null,
+      fecha_nacimiento: body.fecha_nacimiento ?? null,
       id_usuario_modifi: auth.userId ?? null,
     });
 

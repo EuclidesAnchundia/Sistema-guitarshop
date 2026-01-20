@@ -13,9 +13,10 @@ type Props = {
   onIncrement: (index: number) => void
   onDecrement: (index: number) => void
   onRemove: (index: number) => void
+  disabled?: boolean
 }
 
-export function SaleCartTable({ items, productosMap, onIncrement, onDecrement, onRemove }: Props) {
+export function SaleCartTable({ items, productosMap, onIncrement, onDecrement, onRemove, disabled = false }: Props) {
   if (items.length === 0) {
     return (
       <div className="flex h-[calc(100vh-280px)] flex-col items-center justify-center text-slate-400">
@@ -67,6 +68,7 @@ export function SaleCartTable({ items, productosMap, onIncrement, onDecrement, o
                 onIncrement={() => onIncrement(index)}
                 onDecrement={() => onDecrement(index)}
                 onRemove={() => onRemove(index)}
+                disabled={disabled}
               />
             )
           })}

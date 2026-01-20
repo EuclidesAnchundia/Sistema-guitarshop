@@ -8,11 +8,17 @@ function copyIfPresent(fileName) {
 	if (!fs.existsSync(src)) return;
 	fs.mkdirSync(path.dirname(dest), { recursive: true });
 
-	// Copia idempotente.
+	// Copia idempotente. Intentamos copiar, y en caso de EBUSY o bloqueo
+	// no abortamos el build: logueamos y seguimos (el engine ya puede estar en uso).
 	try {
 		fs.copyFileSync(src, dest);
 	} catch (error) {
-		// Si falla (p.ej. permisos), dejamos que el build reporte el problema.
+		// Si el archivo está ocupado por otro proceso (EBUSY) o existe, no fallamos el build.
+		if (error && (error.code === 'EBUSY' || error.code === 'EEXIST' || error.code === 'EPERM')) {
+			console.warn(`Advertencia: no se pudo copiar ${fileName}:`, error.code);
+			return;
+		}
+		// Otros errores los re-lanzamos para que el build los detecte.
 		throw error;
 	}
 }

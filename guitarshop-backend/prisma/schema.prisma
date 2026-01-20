@@ -9,11 +9,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * =========================
- * ENUMS (estados/pagos)
- * =========================
- */
+//
+//  =========================
+//  ENUMS (estados/pagos)
+//  =========================
+ 
 
 enum EstadoCredito {
   ACTIVO
@@ -57,11 +57,11 @@ enum PaymentStatus {
   CANCELED
 }
 
-/**
- * =========================
- * MODELOS BASE
- * =========================
- */
+//
+//  =========================
+//  MODELOS BASE
+//  =========================
+ 
 
 model cliente {
   id_cliente        Int       @id @default(autoincrement())
@@ -102,11 +102,11 @@ model compra {
   producto_compra producto_compra[]
 }
 
-/**
- * =========================
- * CREDITOS / CUOTAS / LEDGER
- * =========================
- */
+//
+//  =========================
+//  CREDITOS / CUOTAS / LEDGER
+//  =========================
+ 
 
 model credito {
   id_credito        Int           @id @default(autoincrement())
@@ -148,10 +148,10 @@ model cuota {
   @@unique([id_credito, numero_cuota], map: "ux_cuota_unica")
 }
 
-/**
- * movimiento_credito = LEDGER (lo contable).
- * Solo creas un movimiento PAGO cuando el pago YA está confirmado (por Payphone webhook/confirmación o pago manual).
- */
+//
+//  movimiento_credito = LEDGER (lo contable).
+//  Solo creas un movimiento PAGO cuando el pago YA está confirmado (por Payphone webhook/confirmación o pago manual).
+ 
 model movimiento_credito {
   id_movimiento_credito Int  @id @default(autoincrement())
   id_credito            Int
@@ -179,18 +179,18 @@ model movimiento_credito {
   @@index([fecha], map: "ix_mov_credito_fecha")
 }
 
-/**
- * =========================
- * PASARELA (PAYPHONE) - TABLAS NUEVAS
- * =========================
- */
+//
+//  =========================
+//  PASARELA (PAYPHONE) - TABLAS NUEVAS
+//  =========================
+ 
 
-/**
- * payment = intento/transacción con pasarela.
- * provider_reference: usa tu "clientTransactionId" (Payphone recomienda/soporta ID propio del comercio)
- * y/o el id propio devuelto por Payphone.
- * Debe ser UNIQUE para deduplicar webhooks/reintentos.
- */
+//
+//  payment = intento/transacción con pasarela.
+//  provider_reference: usa tu "clientTransactionId" (Payphone recomienda/soporta ID propio del comercio)
+//  y/o el id propio devuelto por Payphone.
+//  Debe ser UNIQUE para deduplicar webhooks/reintentos.
+ 
 model payment {
   id_payment Int             @id @default(autoincrement())
   provider   PaymentProvider @default(PAYPHONE)
@@ -207,7 +207,8 @@ model payment {
   currency String  @default("USD") @db.VarChar(8)
 
   // A qué afecta
-  id_credito Int
+  id_credito Int?
+  id_factura Int?
   id_cuota   Int?
 
   // Usuario que inició el pago (si aplica)
@@ -226,7 +227,8 @@ model payment {
   // Guarda payload o datos extra de Payphone (sin romper schema)
   metadata Json?
 
-  credito            credito             @relation(fields: [id_credito], references: [id_credito], onDelete: Cascade)
+  credito            credito?            @relation(fields: [id_credito], references: [id_credito], onDelete: SetNull)
+  factura            factura?            @relation(fields: [id_factura], references: [id_factura], onDelete: SetNull)
   cuota              cuota?              @relation(fields: [id_cuota], references: [id_cuota], onDelete: SetNull)
   usuario            usuario?            @relation(fields: [id_usuario], references: [id_usuario], onDelete: SetNull)
   movimiento_credito movimiento_credito? @relation(fields: [id_movimiento_credito], references: [id_movimiento_credito], onDelete: SetNull)
@@ -237,10 +239,10 @@ model payment {
   @@index([created_at])
 }
 
-/**
- * Para deduplicar webhooks/eventos.
- * Cada evento del proveedor debe procesarse UNA sola vez.
- */
+//
+//  Para deduplicar webhooks/eventos.
+//  Cada evento del proveedor debe procesarse UNA sola vez.
+ 
 model payment_webhook_event {
   id_event    Int             @id @default(autoincrement())
   provider    PaymentProvider @default(PAYPHONE)
@@ -252,11 +254,11 @@ model payment_webhook_event {
   @@index([received_at])
 }
 
-/**
- * =========================
- * FACTURAS / DETALLE
- * =========================
- */
+//
+//  =========================
+//  FACTURAS / DETALLE
+//  =========================
+ 
 
 model detalle_factura {
   id_detalle_factura Int     @id @default(autoincrement())
@@ -293,6 +295,8 @@ model factura {
 
   credito         credito[]
   detalle_factura detalle_factura[]
+  movimientos_factura movimiento_factura[]
+  payments           payment[]
 
   cliente                                    cliente         @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_factura_cliente")
   estado_registro                            estado_registro @relation(fields: [id_estado], references: [id_estado], onDelete: NoAction, onUpdate: NoAction, map: "fk_factura_estado")
@@ -300,11 +304,11 @@ model factura {
   usuario_factura_id_usuario_modifiTousuario usuario?        @relation("factura_id_usuario_modifiTousuario", fields: [id_usuario_modifi], references: [id_usuario], onUpdate: NoAction, map: "fk_factura_usuario_modifi")
 }
 
-/**
- * =========================
- * INVENTARIO / PRODUCTOS
- * =========================
- */
+//
+//  =========================
+//  INVENTARIO / PRODUCTOS
+//  =========================
+ 
 
 model kardex {
   id_kardex         Int      @id @default(autoincrement())
@@ -318,6 +322,7 @@ model kardex {
   comentario        String?  @db.VarChar(255)
   id_estado         Int      @default(1)
   id_usuario_modifi Int?
+ 
 
   estado_registro estado_registro @relation(fields: [id_estado], references: [id_estado], onDelete: NoAction, onUpdate: NoAction, map: "fk_kardex_estado")
   usuario         usuario?        @relation(fields: [id_usuario_modifi], references: [id_usuario], onUpdate: NoAction, map: "fk_kardex_usuario_modifi")
@@ -344,6 +349,12 @@ model producto {
   proveedor       proveedor?        @relation(fields: [id_proveedor], references: [id_proveedor], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_proveedor")
   usuario         usuario?          @relation(fields: [id_usuario_modifi], references: [id_usuario], onUpdate: NoAction, map: "fk_producto_usuario_modifi")
   producto_compra producto_compra[]
+}
+
+// Tabla de contadores para generación atómica de códigos (productos, facturas, etc.)
+model codigo_sequence {
+  prefix      String @id @db.VarChar(60)
+  last_number Int    @default(0)
 }
 
 model producto_compra {
@@ -413,6 +424,7 @@ model usuario {
   proveedor                                  proveedor[]
   movimientos_credito                        movimiento_credito[]
   payments                                   payment[]
+  movimientos_factura                        movimiento_factura[]
 
   estado_registro   estado_registro     @relation(fields: [id_estado], references: [id_estado], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_estado")
   usuario           usuario?            @relation("usuarioTousuario", fields: [id_usuario_modifi], references: [id_usuario], onUpdate: NoAction, map: "fk_usuario_usuario_modifi")
@@ -454,3 +466,28 @@ model estado_registro {
   proveedor       proveedor[]
   usuario         usuario[]
 }
+
+// movimiento_factura = registro de pagos asociados a facturas (CONTADO)
+model movimiento_factura {
+  id_movimiento_factura Int  @id @default(autoincrement())
+  id_factura            Int
+
+  fecha  DateTime              @default(now()) @db.Timestamp(6)
+  tipo   TipoMovimientoCredito @default(PAGO)
+  monto  Decimal               @db.Decimal(12, 2)
+  metodo MetodoPago
+
+  referencia String? @db.VarChar(100)
+  nota       String? @db.VarChar(255)
+  id_usuario Int
+
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @updatedAt @db.Timestamp(6)
+
+  factura factura @relation(fields: [id_factura], references: [id_factura], onDelete: Cascade)
+  usuario usuario @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([id_factura])
+  @@index([fecha])
+}
+

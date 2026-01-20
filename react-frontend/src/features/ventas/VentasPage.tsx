@@ -22,12 +22,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useAuthUser } from "../../lib/hooks/useAuthUser"
 import { httpRequest } from "../../services/httpClient"
 import { salesService, type FormaPago, type VentaDetailRecord, type VentaListRecord } from "../../services/salesService"
+import { useClientesQuery } from "../clientes/useClientesQuery"
 import { formatMoney, round2, toNumberSafe } from "../../utils/number"
 import { SalesDetailDrawer } from "./components/SalesDetailDrawer"
 import { SalesFiltersDrawer, type SalesFilters } from "./components/SalesFiltersDrawer"
 import { SalesListHeader } from "./components/SalesListHeader"
 import { SaleCreateModal } from "./components/SaleCreateModal"
-import type { ClienteOption, ProductoOption } from "./types"
+import type { ProductoOption } from "./types"
 
 // Todas las fechas de facturas se leen igual desde la tabla y el modal.
 const dateFormatter = new Intl.DateTimeFormat("es-EC", {
@@ -150,14 +151,20 @@ export default function VentasPage() {
   })
 
   // Combo de clientes: se usa en el formulario de creación.
-  const clientesQuery = useQuery<ClienteOption[]>({
-    queryKey: ["clientes"],
-    enabled: isAdmin,
-    queryFn: async () => {
-      const data = await httpRequest<ClienteOption[]>("/cliente")
-      return Array.isArray(data) ? data : []
-    },
-  })
+  // Reuse shared clientes query to avoid cache collisions and ensure full data (dirección, etc.)
+  const clientesQuery = useClientesQuery(isAdmin)
+
+  // Map ClienteRecord -> ClienteOption locally without touching the shared cache
+  const clientes = useMemo(() => {
+    const data = clientesQuery.data ?? []
+    return data.map((record) => ({
+      id_cliente: record.id_cliente,
+      nombres: record.nombres,
+      apellidos: record.apellidos,
+      cedula: record.cedula,
+      fecha_nacimiento: record.fecha_nacimiento ? String(record.fecha_nacimiento).slice(0, 10) : null,
+    }))
+  }, [clientesQuery.data])
 
   // Inventario resumido para autocompletar cada detalle.
   const productosQuery = useQuery<ProductoOption[]>({
@@ -294,7 +301,6 @@ export default function VentasPage() {
   })
 
   const ventas = useMemo(() => ventasQuery.data ?? [], [ventasQuery.data])
-  const clientes = useMemo(() => clientesQuery.data ?? [], [clientesQuery.data])
   const productos = useMemo(() => productosQuery.data ?? [], [productosQuery.data])
 
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)

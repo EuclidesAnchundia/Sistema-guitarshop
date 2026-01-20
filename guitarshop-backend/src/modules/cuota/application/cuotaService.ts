@@ -371,6 +371,10 @@ export async function applyConfirmedPayment(
     return { ok: true, message: "MOVIMIENTO_EXISTENTE", movimientoId: payment.id_movimiento_credito };
   }
 
+  if (!payment.id_credito) {
+    throw new Error("PAYMENT_NO_CREDITO");
+  }
+
   // Crear movimiento usando helper interno
   const movimiento = await createMovimientoCredito(tx, {
     id_credito: payment.id_credito,

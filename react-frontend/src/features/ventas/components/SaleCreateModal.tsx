@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useFieldArray, useForm, useWatch } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query"
+import type { UseQueryOptions } from "@tanstack/react-query"
 import { toast } from "sonner"
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../../../components/ui/dialog"
 import { salesService, type VentaPayload } from "../../../services/salesService"
+import { payphoneService } from "../../../services/payphoneService"
 import { calcTotals } from "../../../modules/ventas/utils/salesCalc"
 import { round2, toNumberSafe } from "../../../utils/number"
 
@@ -119,6 +121,8 @@ const makeDefaultValues = (): SaleCreateFormValues => {
     id_cliente: 0,
     observacion: "",
     forma_pago: "CONTADO",
+    metodo_pago: "EFECTIVO",
+    monto_a_pagar: 0,
     creditoConfig: {
       numero_cuotas: "6",
       fecha_primer_vencimiento: toIsoDate(in30),
@@ -135,9 +139,15 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
 
   const [formError, setFormError] = useState<string | null>(null)
   const [createdSale, setCreatedSale] = useState<import("../../../services/salesService").VentaDetailRecord | null>(null)
+  const [metodoPago, setMetodoPago] = useState<"EFECTIVO" | "TRANSFERENCIA" | "PAYPHONE">("EFECTIVO")
+  const [montoAPagar, setMontoAPagar] = useState<number | string>(0)
+  const [payphoneInProgress, setPayphoneInProgress] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null)
+  const [currentFacturaId, setCurrentFacturaId] = useState<number | null>(null)
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false)
   const [successOpen, setSuccessOpen] = useState(false)
   const [descuentoGeneral, setDescuentoGeneral] = useState<number>(0)
+  const [applyIva, setApplyIva] = useState<boolean>(true)
   const [showConfirmClose, setShowConfirmClose] = useState(false)
 
   const form = useForm<SaleCreateFormValues>({
@@ -163,7 +173,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
     
     // Aplicar descuento general al subtotal
     const subtotalConDescuento = Math.max(0, baseTotals.subtotal - descuentoGeneral)
-    const nuevoImpuesto = round2(subtotalConDescuento * IVA_RATE)
+    const nuevoImpuesto = applyIva ? round2(subtotalConDescuento * IVA_RATE) : 0
     const nuevoTotal = round2(subtotalConDescuento + nuevoImpuesto)
     
     return {
@@ -172,7 +182,12 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
       impuesto: nuevoImpuesto,
       total: nuevoTotal,
     }
-  }, [detalleValues, descuentoGeneral])
+  }, [detalleValues, descuentoGeneral, applyIva])
+
+  useEffect(() => {
+    // Mantener monto por defecto igual al total
+    setMontoAPagar(totals.total)
+  }, [totals.total])
 
   const buildPayload = (values: SaleCreateFormValues): VentaPayload => {
     const creditoConfig =
@@ -214,14 +229,21 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
     mutationFn: (payload: VentaPayload) => salesService.createSale(payload),
     onSuccess: (sale) => {
       queryClient.invalidateQueries({ queryKey: ["ventas"] })
-      toast.success("Venta exitosa")
+      toast.success("Venta registrada")
 
-      // Imprimir automáticamente al crear la venta (sin modal/preview interno)
+      // Si hay un proceso PayPhone en curso, no cerrar modal automáticamente.
+      if (payphoneInProgress) {
+        setCreatedSale(sale)
+        setFormError(null)
+        // mantener modal abierto y esperar al flujo de PayPhone
+        return
+      }
+
+      // Flujo normal: imprimir y cerrar modal
       setCreatedSale(sale)
       setSuccessOpen(true)
       setAutoPrintEnabled(false)
 
-      // Dar ~1s para que el usuario vea el mensaje antes de abrir impresión
       if (autoPrintTimeoutRef.current) {
         window.clearTimeout(autoPrintTimeoutRef.current)
       }
@@ -239,6 +261,149 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
       toast.error("Error al guardar")
     },
   })
+
+  // Ref para indicar flujo payphone entre caller y onSuccess
+  const payphoneFlowRef = useRef(false)
+
+  // Poll payments for the created factura while payphone flow is active
+  useQuery(
+    {
+      queryKey: ["payments", currentFacturaId],
+      queryFn: async (): Promise<Record<string, unknown>[]> => {
+        if (!currentFacturaId) return [] as Record<string, unknown>[]
+        const res = await payphoneService.listByFactura(currentFacturaId)
+        const resObj = res as Record<string, unknown> | null
+        return (resObj && (resObj.payments as Record<string, unknown>[])) || []
+      },
+      enabled: Boolean(currentFacturaId && payphoneInProgress),
+      refetchInterval: 3000,
+      onSuccess: (payments: Record<string, unknown>[]) => {
+        try {
+          if (!Array.isArray(payments)) return
+          // Find first payphone payment for this factura
+          const p = payments.find((x: Record<string, unknown>) => String(x?.status ?? "").toUpperCase() === "CONFIRMED" || String(x?.status ?? "").toUpperCase() === "FAILED" || String(x?.status ?? "").toUpperCase() === "PENDING")
+          if (!p) return
+          const st = String((p as Record<string, unknown>).status ?? "").toUpperCase()
+          if (st === "PENDING") {
+            setPaymentStatus("PENDING")
+            return
+          }
+
+          if (st === "CONFIRMED") {
+            // Pago confirmado — aplicar UI changes
+            setPaymentStatus("CONFIRMED")
+            setPayphoneInProgress(false)
+            payphoneFlowRef.current = false
+            // limpiar sessionStorage pending
+            try {
+              const key = "pending_payments"
+              const raw = sessionStorage.getItem(key)
+              const arr = raw ? JSON.parse(raw) as Array<Record<string, unknown>> : []
+              const filtered = arr.filter((r) => Number(r.id_factura) !== Number(currentFacturaId))
+              sessionStorage.setItem(key, JSON.stringify(filtered))
+            } catch (err) {
+              // log to help debugging tests
+              console.error("Error limpiando pending_payments", err)
+            }
+
+            // Refrescar lista y cerrar modal según tipo de venta
+            queryClient.invalidateQueries({ queryKey: ["ventas"] })
+            toast.success("Pago confirmado")
+            // Cerrar modal y reset
+            setTimeout(() => {
+              form.reset(defaultValues)
+              setFormError(null)
+              onOpenChange(false)
+            }, 300)
+            return
+          }
+
+          if (st === "FAILED") {
+            setPaymentStatus("FAILED")
+            setPayphoneInProgress(false)
+            payphoneFlowRef.current = false
+            toast.error("Pago fallido")
+            return
+          }
+        } catch (e) {
+          console.error("Error procesando payments poll", e)
+        }
+      },
+    } as UseQueryOptions<Record<string, unknown>[], Error>
+  )
+
+  async function handlePayphoneClick() {
+    console.log("PAYPHONE FLOW START")
+    setFormError(null)
+    setPayphoneInProgress(true)
+    payphoneFlowRef.current = true
+
+    try {
+      // Validar formulario
+      const values = form.getValues()
+      const payload = buildPayload(values)
+
+      // Crear venta (mutación react-query) pero mantener modal abierto
+      const sale = await createMutation.mutateAsync(payload)
+      // sale debe contener id_factura
+      const idFactura = (sale as Record<string, unknown>)?.id_factura as number | undefined
+      if (!idFactura) throw new Error("Venta creada sin id_factura")
+
+      // Crear intención PayPhone
+      const amountToPay = Number(montoAPagar ?? totals.total)
+      // Validaciones: monto <= total, en credito monto > 0
+      if (amountToPay > Number(totals.total)) throw new Error("Monto a pagar no puede ser mayor al total")
+      if (payload.forma_pago === "CREDITO" && amountToPay <= 0) throw new Error("En crédito el monto a pagar debe ser mayor a 0")
+      const { payment, intent } = await payphoneService.createIntent({ id_factura: idFactura, amount: amountToPay })
+      console.log("INTENCION PAYPHONE CREADA", { id_factura: idFactura, amount: amountToPay, intent })
+
+      // Guardar pending en sessionStorage para mostrar estados en UI
+      try {
+        const key = "pending_payments"
+        const raw = sessionStorage.getItem(key)
+        const arr = raw ? JSON.parse(raw) as Array<Record<string, unknown>> : []
+        const payRec = payment as unknown as Record<string, unknown>
+        arr.push({ id_payment: payRec.id_payment ?? null, id_factura: Number(idFactura), status: String(payRec.status ?? "PENDING") })
+        sessionStorage.setItem(key, JSON.stringify(arr))
+      } catch (err) {
+        console.error("Error guardando pending_payments", err)
+      }
+
+      if (!intent || !intent.paymentUrl) throw new Error("Respuesta inválida del proveedor")
+
+      // Mark current factura and payment status pending so polling can start
+      setCurrentFacturaId(Number(idFactura))
+      setPaymentStatus("PENDING")
+
+      // Abrir checkout en nueva pestaña
+      window.open(intent.paymentUrl, "_blank")
+      toast.success("Intención creada, se abrió el checkout de PayPhone")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setFormError(msg || "Error al iniciar PayPhone")
+      toast.error("Error en PayPhone")
+      // reset flow
+      payphoneFlowRef.current = false
+      setPayphoneInProgress(false)
+    }
+  }
+
+  function handleCancelPayphone() {
+    try {
+      const key = "pending_payments"
+      const raw = sessionStorage.getItem(key)
+      const arr = raw ? JSON.parse(raw) as Array<Record<string, unknown>> : []
+      const filtered = arr.filter((r) => Number(r.id_factura) !== Number(currentFacturaId))
+      sessionStorage.setItem(key, JSON.stringify(filtered))
+    } catch (err) {
+      console.error("Error limpiando pending_payments al cancelar", err)
+    }
+    payphoneFlowRef.current = false
+    setPayphoneInProgress(false)
+    setPaymentStatus(null)
+    setCurrentFacturaId(null)
+    toast.success("Pago cancelado (intención)")
+  }
 
   const confirmCloseIfDirty = (shouldClose: boolean = true) => {
     if (!form.formState.isDirty) {
@@ -281,6 +446,13 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
 
     if (!stockOk) {
       toast.error("Revisa el stock disponible")
+      return
+    }
+
+    // Si el método seleccionado es PAYPHONE, iniciar el flujo de PayPhone
+    if (metodoPago === "PAYPHONE") {
+      // Ejecutar la lógica de PayPhone (crea venta PENDIENTE, crea intención y abre checkout)
+      handlePayphoneClick()
       return
     }
 
@@ -360,7 +532,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
             <form onSubmit={onSubmit} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 overflow-hidden flex flex-col">
                 {/* Barra superior: cliente + observaciones */}
-                <SaleTopBar form={form} clientes={clientes} clientesLoading={clientesLoading} />
+                <SaleTopBar form={form} clientes={clientes} clientesLoading={clientesLoading} disabled={payphoneInProgress} />
 
                 <div className="flex flex-1 overflow-hidden">
                   {/* Panel izquierdo 70% */}
@@ -370,7 +542,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
                       <SaleSearchAutocomplete
                         productos={productos}
                         onAddProduct={addProduct}
-                    disabled={createMutation.isPending}
+                    disabled={createMutation.isPending || payphoneInProgress}
                   />
                     </div>
 
@@ -382,6 +554,7 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
                     onIncrement={(idx) => updateQty(idx, 1)}
                     onDecrement={(idx) => updateQty(idx, -1)}
                     onRemove={(idx) => detalleFieldArray.remove(idx)}
+                    disabled={payphoneInProgress}
                       />
                     </div>
                   </div>
@@ -393,8 +566,19 @@ export function SaleCreateModal({ open, onOpenChange, clientes, productos, clien
                   descuento={totals.descuento}
                   iva={totals.impuesto}
                   total={totals.total}
+                  applyIva={applyIva}
+                  onApplyIvaChange={(v) => setApplyIva(v)}
                   hasItems={detalleValues.length > 0}
                   isSubmitting={createMutation.isPending}
+                  payphoneInProgress={payphoneInProgress}
+                  metodoPago={metodoPago}
+                  onMetodoChange={(next) => setMetodoPago(next)}
+                  montoAPagar={montoAPagar}
+                  onMontoAPagarChange={(next) => setMontoAPagar(next)}
+                  onPayphoneClick={handlePayphoneClick}
+                  paymentStatus={paymentStatus}
+                  onCancelPayment={handleCancelPayphone}
+                  formaPago={form.watch("forma_pago")}
                   onCancel={handleHeaderClose}
                   onDescuentoChange={(value) => {
                     const num = parseFloat(value) || 0

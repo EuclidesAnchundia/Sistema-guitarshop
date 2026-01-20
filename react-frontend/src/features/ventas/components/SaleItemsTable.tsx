@@ -20,6 +20,8 @@ export type SaleCreateFormValues = {
   id_cliente: number
   observacion?: string
   forma_pago: "CONTADO" | "CREDITO"
+  metodo_pago?: "EFECTIVO" | "TRANSFERENCIA" | "PAYPHONE"
+  monto_a_pagar?: string | number
   detalle: SaleCreateLineForm[]
   creditoConfig?: {
     numero_cuotas: string

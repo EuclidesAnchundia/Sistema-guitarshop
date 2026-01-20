@@ -3,6 +3,7 @@ export type ClienteOption = {
   nombres: string
   apellidos: string
   cedula: string
+  fecha_nacimiento?: string | null
 }
 
 export type ProductoOption = {
