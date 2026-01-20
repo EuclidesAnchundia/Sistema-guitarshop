@@ -2,6 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+
 import { useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertCircle, CalendarClock, Check, Clock, CreditCard, DollarSign, Download, Eye, Loader2, PiggyBank, ShieldAlert } from "lucide-react"
@@ -73,7 +74,6 @@ export default function CreditosPage() {
 
   const getApiErrorMessage = (error: unknown, fallback: string) => {
     if (isAxiosError(error)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const resp = (error as any).response
       return resp?.data?.error ?? resp?.data?.message ?? error.message ?? fallback
     }
@@ -162,7 +162,6 @@ export default function CreditosPage() {
         queryClient.setQueryData(["credito", paidCreditId], (old: unknown) => {
           if (!old) return old
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const copy = JSON.parse(JSON.stringify(old as unknown)) as any
             if (!Array.isArray(copy.installments)) return old
             const idx = copy.installments.findIndex((it: any) => it.id === mapped.id)
@@ -193,7 +192,6 @@ export default function CreditosPage() {
         queryClient.setQueryData(["creditos"], (old: unknown) => {
           if (!old) return old
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const list = JSON.parse(JSON.stringify(old as unknown)) as any
             const credit = list.find((c: any) => c.id === paidCreditId)
             if (credit) {
@@ -231,7 +229,6 @@ export default function CreditosPage() {
         queryClient.setQueryData(["credito", paidCreditId], (old: unknown) => {
           if (!old) return old
           try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const copy = JSON.parse(JSON.stringify(old as unknown)) as any
             const installment = copy.installments?.find((it: unknown) => (it as { id?: number }).id === selectedInstallment.id)
             if (installment) {
