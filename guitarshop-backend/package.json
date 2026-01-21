@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@sentry/node": "^8.55.0",
+    "@tailwindcss/oxide": "^4.1.16",
     "@tailwindcss/postcss": "^4",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
