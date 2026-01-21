@@ -1,9 +1,11 @@
 import jwt, { JwtPayload } from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET no está definido en las variables de entorno");
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET as string | undefined;
+  if (!secret) {
+    throw new Error("JWT_SECRET no está definido en las variables de entorno");
+  }
+  return secret;
 }
 
 export interface AuthResult {
@@ -43,7 +45,7 @@ export function verifyToken(req: Request): AuthResult {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload & {
+    const decoded = jwt.verify(token, getJwtSecret()) as JwtPayload & {
       id?: number;
       rol?: string;
     };
