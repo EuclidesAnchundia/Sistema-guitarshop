@@ -3,9 +3,12 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { ensureEstadoRegistroActivo } from "../../../shared/prisma/estadoRegistro";
 
-const JWT_SECRET = process.env.JWT_SECRET as string;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET no está definido en las variables de entorno");
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET as string | undefined;
+  if (!secret) {
+    throw new Error("JWT_SECRET no está definido en las variables de entorno");
+  }
+  return secret;
 }
 
 // Para usar al crear / actualizar usuarios
@@ -46,7 +49,7 @@ export async function loginUsuario(email: string, password: string) {
       correo: user.correo,
       rol: user.rol,
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: "2h" }
   );
 
