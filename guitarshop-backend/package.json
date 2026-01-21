@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=18.18.0"
+    "node": "20.x"
   },
   "scripts": {
-    "dev": "node scripts/runNext.js dev --webpack",
+    "dev": "next dev --webpack",
     "prebuild": "node scripts/copyPrismaEngines.mjs",
-    "build": "node scripts/runNext.js build --webpack",
-    "start": "node scripts/runNext.js start",
+    "build": "next build --webpack",
+    "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate && node scripts/copyPrismaEngines.mjs",
     "db:generate": "prisma generate",
