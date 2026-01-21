@@ -80,7 +80,10 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@shared": path.resolve(__dirname, "./src/shared"),
+      react: path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
     },
+    dedupe: ["react", "react-dom"],
   },
   build: {
     chunkSizeWarningLimit: 600,
