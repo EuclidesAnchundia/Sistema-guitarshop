@@ -1,17 +1,6 @@
 // importaciones
 import type { Metadata } from "next"; // Proporciona tipado fuerte para los metadatos globales de Next.js.
-import { Geist, Geist_Mono } from "next/font/google"; // Carga y gestiona fuentes hospedadas en Google Fonts.
 import "./globals.css"; // Estilos globales que se aplican a toda la aplicación.
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-}); // Configura la fuente sans serif y expone su variable CSS para usarla en el layout.
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-}); // Configura la fuente monoespaciada y expone su variable CSS.
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -25,9 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">{/* Elemento raíz HTML que fija el idioma del documento */}
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className="antialiased">
         {/* Aplica las fuentes registradas y un suavizado tipográfico para todo el body */}
         {children}
         {/* Inyecta la jerarquía de componentes de cada página dentro del layout global */}
