@@ -15,6 +15,7 @@ Crea un archivo `.env` en esta carpeta con al menos:
 DATABASE_URL="postgresql://postgres:12345@localhost:5432/guitarshop?schema=public"
 JWT_SECRET="GuitarShop_123"
 CORS_ORIGIN="http://localhost:5173"
+# En producción: tu dominio de frontend (ej: https://tu-sitio.netlify.app)
 ```
 
 ## Instalación y ejecución
