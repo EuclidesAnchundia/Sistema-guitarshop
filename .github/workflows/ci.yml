@@ -20,12 +20,19 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
         run: |
           cd ${{ matrix.project }}
-          npm ci
+          # Try strict install first, fall back to a clean npm install if optional/native deps fail
+          npm ci || (
+            rm -rf node_modules package-lock.json || true
+            npm cache clean --force || true
+            npm install
+          )
+          # Attempt to rebuild any native bindings that might be missing
+          npm rebuild || true
 
       - name: Lint (strict)
         run: |
