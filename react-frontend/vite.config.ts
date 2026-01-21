@@ -81,6 +81,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "@shared": path.resolve(__dirname, "./src/shared"),
     },
+    dedupe: ["react", "react-dom"],
   },
   build: {
     chunkSizeWarningLimit: 600,
