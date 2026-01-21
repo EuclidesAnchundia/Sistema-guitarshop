@@ -1,4 +1,4 @@
-import React from "react"
+import type { FC } from "react"
 
 type Props = {
   currentPage: number
@@ -12,7 +12,7 @@ type Props = {
   disabledNext?: boolean
 }
 
-export const PaginationFooter: React.FC<Props> = ({
+export const PaginationFooter: FC<Props> = ({
   currentPage,
   totalPages,
   pageSize,
