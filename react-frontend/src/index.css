@@ -281,6 +281,50 @@ h6 {
   }
 }
 
+/* Reglas adicionales para mejorar la experiencia móvil: */
+@media (max-width: 640px) {
+  /* Suavizar utilidades que usan pesos fuertes */
+  .font-semibold {
+    font-weight: 500 !important;
+  }
+
+  .font-bold {
+    font-weight: 600 !important;
+  }
+
+  /* Reducir tamaños grandes que pueden romper el layout en móviles */
+  .text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 1.2 !important;
+  }
+
+  .text-2xl {
+    font-size: 1.25rem !important;
+  }
+
+  /* Tablas: evitar que cabeceras ocupen demasiado espacio */
+  th {
+    font-weight: 600 !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* Tarjetas y contenedores: reducir padding para que quepa mejor */
+  .card {
+    padding: 1rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  /* Botones más compactos */
+  .btn-primary {
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* Evitar texto excesivamente oscuro en componentes que usan texto muy pesado */
+  .text-slate-900 {
+    color: var(--color-text) !important;
+  }
+}
+
 p {
   color: var(--color-muted);
 }
