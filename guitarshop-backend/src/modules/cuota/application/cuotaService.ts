@@ -293,8 +293,8 @@ export async function pagarCuota(params: {
     nuevoEstado = "PAGADO";
     fecha_pago = new Date();
   } else if (nuevoMontoPagado > 0 && nuevoMontoPagado < montoCuota) {
-    nuevoEstado = "PENDIENTE";
-    // puedes decidir si guardar fecha_pago o no en parcial
+    // Cuando hay un abono parcial, marcamos como PARCIAL (consistente con otras funciones)
+    nuevoEstado = "PARCIAL";
     fecha_pago = null;
   }
 
@@ -524,7 +524,7 @@ export async function registrarPagoCuota(params: {
         where: { id_cuota },
         data: {
           monto_pagado: nuevoMontoPagado,
-          estado_cuota: pagada ? "PAGADO" : cuota.estado_cuota,
+          estado_cuota: pagada ? ("PAGADO" as Prisma.cuotaUpdateInput["estado_cuota"]) : ("PARCIAL" as Prisma.cuotaUpdateInput["estado_cuota"]),
           fecha_pago: pagada ? asDateOnly(fecha) : null,
           id_usuario_modifi: id_usuario,
         },
