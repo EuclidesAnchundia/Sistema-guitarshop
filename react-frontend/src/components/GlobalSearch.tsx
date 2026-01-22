@@ -184,7 +184,7 @@ export const GlobalSearch = () => {
         >
           <Search className="h-4 w-4" />
           <span className="hidden sm:inline">Buscar</span>
-          <span className="text-xs uppercase text-slate-400">Ctrl + K</span>
+          <span className="hidden text-xs uppercase text-slate-400 sm:inline">Ctrl + K</span>
         </button>
       )}
 
@@ -210,7 +210,7 @@ export const GlobalSearch = () => {
             </div>
 
             <div className="mt-5 flex-1 min-h-0 overflow-hidden">
-              <div className="grid h-full min-h-0 grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-6">
+              <div className="grid h-full min-h-0 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                 {/* Panel izquierdo: atajos + resultados (scrollea) */}
                 <div className="min-w-0 min-h-0 overflow-y-auto overflow-x-hidden pr-1">
                   {navResults.length > 0 && (
