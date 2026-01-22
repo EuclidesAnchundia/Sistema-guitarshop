@@ -158,6 +158,8 @@ export const AppLayout = () => {
 
 
 
+  const gridTemplateColumns = isMobile ? "1fr" : `${sidebarCollapsed ? "72px" : "220px"} 1fr`;
+
   return (
 
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -166,7 +168,7 @@ export const AppLayout = () => {
 
         className="grid min-h-screen"
 
-        style={{ gridTemplateColumns: `${sidebarCollapsed ? "72px" : "220px"} 1fr` }}
+        style={{ gridTemplateColumns }}
 
       >
 
@@ -287,7 +289,8 @@ export const AppLayout = () => {
 
           </nav>
 
-        </aside>
+          </aside>
+        )}
 
 
 
