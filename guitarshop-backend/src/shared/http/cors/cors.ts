@@ -2,17 +2,33 @@ import { NextResponse } from "next/server";
 
 const CONFIG_CORS = process.env.CORS_ORIGIN ?? "*";
 
-function isAllowedOrigin(origin: string | null, allowed: string) {
+function normalizeOrigin(o: string) {
+  return o.trim().replace(/\/$/, "").toLowerCase();
+}
+
+const ALLOWED_LIST = CONFIG_CORS === "*"
+  ? ["*"]
+  : CONFIG_CORS.split(",").map((s) => normalizeOrigin(s)).filter(Boolean);
+
+function isAllowedOrigin(origin: string | null) {
   if (!origin) return false;
-  if (allowed.trim() === "*") return true;
-  const list = allowed.split(",").map((s) => s.trim()).filter(Boolean);
-  return list.includes(origin);
+  if (ALLOWED_LIST.length === 1 && ALLOWED_LIST[0] === "*") return true;
+  return ALLOWED_LIST.includes(normalizeOrigin(origin));
 }
 
 export function applyCorsHeaders(res: NextResponse, requestOrigin?: string | null) {
-  const originToSet = requestOrigin && isAllowedOrigin(requestOrigin, CONFIG_CORS)
-    ? requestOrigin
-    : CONFIG_CORS;
+  let originToSet: string;
+  if (requestOrigin && isAllowedOrigin(requestOrigin)) {
+    originToSet = requestOrigin;
+  } else if (ALLOWED_LIST.length === 1 && ALLOWED_LIST[0] !== "*") {
+    originToSet = ALLOWED_LIST[0];
+  } else if (ALLOWED_LIST.length === 1 && ALLOWED_LIST[0] === "*") {
+    originToSet = "*";
+  } else {
+    // Multiple allowed origins configured but request origin not allowed —
+    // don't return a comma-separated list (invalid). Use wildcard to fail safely.
+    originToSet = "*";
+  }
 
   res.headers.set("Access-Control-Allow-Origin", originToSet);
   res.headers.set(
