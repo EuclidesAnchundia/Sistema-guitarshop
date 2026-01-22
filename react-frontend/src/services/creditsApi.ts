@@ -136,7 +136,7 @@ function normalizeNextInstallment(raw: unknown): NextInstallment {
 		number: toNumberSafe(r.number),
 		dueDate: asString(r.dueDate),
 		amount: toNumberSafe(r.amount),
-		status: (status === "VENCIDA" || status === "PAGADA" ? status : "PENDIENTE") as InstallmentStatus,
+		status: normalizeInstallmentStatus(status),
 	}
 }
 
@@ -166,9 +166,16 @@ function normalizeInstallment(raw: unknown): CreditInstallment {
 		dueDate: asString(r.dueDate),
 		amount: toNumberSafe(r.amount),
 		paidAmount: toNumberSafe(r.paidAmount),
-		status: (status === "VENCIDA" || status === "PAGADA" || status === "PARCIAL" ? status : "PENDIENTE") as InstallmentStatus,
+		status: normalizeInstallmentStatus(status),
 		paidAt: r.paidAt ? asString(r.paidAt) : null,
 	}
+}
+
+function normalizeInstallmentStatus(status: string): InstallmentStatus {
+	if (status === "PAGADO") return "PAGADA"
+	if (status === "VENCIDO") return "VENCIDA"
+	if (status === "VENCIDA" || status === "PAGADA" || status === "PARCIAL") return status
+	return "PENDIENTE"
 }
 
 function normalizeCreditDetail(raw: unknown): CreditDetail {
