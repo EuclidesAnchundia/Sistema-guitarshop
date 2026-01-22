@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
-import { ChevronDown, ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 
 
@@ -69,27 +69,6 @@ export const AppLayout = () => {
     return window.localStorage.getItem("sidebar_collapsed") !== "false";
 
   });
-
-  const [isMobile, setIsMobile] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const mq = window.matchMedia("(max-width: 640px)");
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    try { mq.addEventListener("change", onChange); } catch { mq.addListener(onChange); }
-    return () => { try { mq.removeEventListener("change", onChange); } catch { mq.removeListener(onChange); } };
-  }, []);
-
-  // Prevent background scroll when mobile menu is open
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [mobileOpen]);
-
-
 
   useEffect(() => {
 
@@ -192,18 +171,17 @@ export const AppLayout = () => {
       >
 
         {/* SIDEBAR: navegación fija de toda la aplicación */}
-
         <aside
 
-          className={cn(
+            className={cn(
 
-            "flex h-full flex-col border-r border-slate-200 bg-white p-4 transition-[width] duration-300",
+              "flex h-full flex-col border-r border-slate-200 bg-white p-4 transition-[width] duration-300",
 
-            sidebarCollapsed ? "w-[72px] px-2" : "w-[220px]"
+              sidebarCollapsed ? "w-[72px] px-2" : "w-[220px]"
 
-          )}
+            )}
 
-        >
+          >
 
           <div
 
@@ -311,64 +289,13 @@ export const AppLayout = () => {
 
         </aside>
 
-        {/* MOBILE: overlay sidebar */}
-        {isMobile && mobileOpen && (
-          <>
-            <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setMobileOpen(false)} />
-            <aside className="fixed left-0 top-0 z-50 h-full w-72 bg-white p-4 shadow-xl transform transition-transform duration-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-sm font-bold text-white">GS</div>
-                  <div>
-                    <h1 className="text-base font-semibold text-slate-900">GuitarShop</h1>
-                    <p className="text-[11px] text-slate-500">Sistema administrativo y ventas</p>
-                  </div>
-                </div>
-                <button onClick={() => setMobileOpen(false)} className="p-2 rounded-md text-slate-600">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <nav className="flex flex-1 flex-col gap-2">
-                {navItems.map(({ label, to, icon: Icon }: NavItem) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      cn(
-                        linkBase,
-                        "px-2 py-2 text-sm",
-                        isActive ? linkActive : linkInactive
-                      )
-                    }
-                    end={to === "/dashboard"}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{label}</span>
-                  </NavLink>
-                ))}
-              </nav>
-            </aside>
-          </>
-        )}
-
 
 
         {/* CONTENIDO */}
 
         <div className="flex min-h-screen flex-col">
 
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
-
-            {isMobile && (
-              <button
-                onClick={() => setMobileOpen(true)}
-                className="mr-2 p-2 rounded-md text-slate-600"
-                aria-label="Abrir menú"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
-            )}
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
 
             <GlobalSearch />
 
@@ -392,7 +319,7 @@ export const AppLayout = () => {
 
           {/* CONTENIDO DE CADA PANTALLA (Outlet de React Router) */}
 
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto bg-slate-100 p-4 sm:p-6">
 
             <Outlet />
 
