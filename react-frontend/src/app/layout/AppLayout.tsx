@@ -179,6 +179,8 @@ export const AppLayout = () => {
 
 
 
+  const gridTemplateColumns = isMobile ? "1fr" : `${sidebarCollapsed ? "72px" : "220px"} 1fr`;
+
   return (
 
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -187,23 +189,23 @@ export const AppLayout = () => {
 
         className="grid min-h-screen"
 
-        style={{ gridTemplateColumns: `${sidebarCollapsed ? "72px" : "220px"} 1fr` }}
+        style={{ gridTemplateColumns }}
 
       >
 
         {/* SIDEBAR: navegación fija de toda la aplicación */}
+        {!isMobile && (
+          <aside
 
-        <aside
+            className={cn(
 
-          className={cn(
+              "flex h-full flex-col border-r border-slate-200 bg-white p-4 transition-[width] duration-300",
 
-            "flex h-full flex-col border-r border-slate-200 bg-white p-4 transition-[width] duration-300",
+              sidebarCollapsed ? "w-[72px] px-2" : "w-[220px]"
 
-            sidebarCollapsed ? "w-[72px] px-2" : "w-[220px]"
+            )}
 
-          )}
-
-        >
+          >
 
           <div
 
@@ -309,7 +311,8 @@ export const AppLayout = () => {
 
           </nav>
 
-        </aside>
+          </aside>
+        )}
 
         {/* MOBILE: overlay sidebar */}
         {isMobile && mobileOpen && (
@@ -358,7 +361,7 @@ export const AppLayout = () => {
 
         <div className="flex min-h-screen flex-col">
 
-          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-3">
+          <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
 
             {isMobile && (
               <button
@@ -392,7 +395,7 @@ export const AppLayout = () => {
 
           {/* CONTENIDO DE CADA PANTALLA (Outlet de React Router) */}
 
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
 
             <Outlet />
 
