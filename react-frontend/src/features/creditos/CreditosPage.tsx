@@ -62,6 +62,7 @@ export default function CreditosPage() {
 
   const installmentStatusClasses: Record<string, string> = {
     PENDIENTE: "bg-amber-100 text-amber-800",
+    PARCIAL: "bg-amber-50 text-amber-800",
     VENCIDA: "bg-red-100 text-red-800",
     PAGADA: "bg-emerald-100 text-emerald-800",
   }

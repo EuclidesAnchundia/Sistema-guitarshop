@@ -20,6 +20,7 @@ const DEFAULT_PAGE_SIZE: PageSizeOption = 20
 
 const installmentStatusClasses: Record<string, string> = {
   PENDIENTE: "bg-slate-100 text-slate-700",
+  PARCIAL: "bg-amber-50 text-amber-800",
   VENCIDA: "bg-slate-100 text-slate-700",
   PAGADA: "bg-slate-100 text-slate-700",
 }

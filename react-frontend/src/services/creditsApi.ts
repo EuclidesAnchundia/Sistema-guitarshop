@@ -5,7 +5,7 @@ import { filenameFromContentDisposition } from "../shared/export/contentDisposit
 import { downloadBlob } from "../shared/export/downloadBlob"
 
 export type CreditStatus = "ACTIVO" | "VENCIDOS" | "CANCELADO"
-export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA"
+export type InstallmentStatus = "PENDIENTE" | "VENCIDA" | "PAGADA" | "PARCIAL"
 
 export type PaymentMethod = "EFECTIVO" | "TRANSFERENCIA" | "TARJETA"
 
@@ -166,7 +166,7 @@ function normalizeInstallment(raw: unknown): CreditInstallment {
 		dueDate: asString(r.dueDate),
 		amount: toNumberSafe(r.amount),
 		paidAmount: toNumberSafe(r.paidAmount),
-		status: (status === "VENCIDA" || status === "PAGADA" ? status : "PENDIENTE") as InstallmentStatus,
+		status: (status === "VENCIDA" || status === "PAGADA" || status === "PARCIAL" ? status : "PENDIENTE") as InstallmentStatus,
 		paidAt: r.paidAt ? asString(r.paidAt) : null,
 	}
 }

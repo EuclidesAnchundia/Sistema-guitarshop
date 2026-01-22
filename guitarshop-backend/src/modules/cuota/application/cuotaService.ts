@@ -565,7 +565,7 @@ export async function registrarPagoCuota(params: {
           where: { id_cuota: cuota.id_cuota },
           data: {
               monto_pagado: nuevoMontoPagado,
-              estado_cuota: (pagada ? ("PAGADO" as Prisma.cuotaUpdateInput["estado_cuota"]) : cuota.estado_cuota),
+              estado_cuota: (pagada ? ("PAGADO" as Prisma.cuotaUpdateInput["estado_cuota"]) : ("PARCIAL" as Prisma.cuotaUpdateInput["estado_cuota"])),
               fecha_pago: pagada ? asDateOnly(fecha) : null,
               id_usuario_modifi: id_usuario,
             },
