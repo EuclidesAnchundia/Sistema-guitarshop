@@ -264,9 +264,9 @@ h6 {
   margin-bottom: 0.5rem;
 }
 
-/* Ajustes para dispositivos móviles: reducir ligeramente el peso
-   tipográfico para mejorar legibilidad en pantallas pequeñas. */
+/* Reglas móviles consolidadas: reducir peso tipográfico y tamaños para pantallas pequeñas */
 @media (max-width: 640px) {
+  /* Encabezados y botones: suavizar peso */
   h1,
   h2,
   h3,
@@ -278,50 +278,38 @@ h6 {
 
   .btn-primary {
     font-weight: 500;
+    padding: 0.5rem 0.75rem;
   }
-}
 
-/* Reglas adicionales para mejorar la experiencia móvil: */
-@media (max-width: 640px) {
-  /* Suavizar utilidades que usan pesos fuertes */
+  /* Utilidades: evitar forzar con !important para mantener coherencia con Tailwind */
   .font-semibold {
-    font-weight: 500 !important;
+    font-weight: 500;
   }
 
   .font-bold {
-    font-weight: 600 !important;
+    font-weight: 600;
   }
 
-  /* Reducir tamaños grandes que pueden romper el layout en móviles */
+  /* Escalado de títulos */
   .text-3xl {
-    font-size: 1.5rem !important;
-    line-height: 1.2 !important;
+    font-size: 1.5rem;
+    line-height: 1.2;
   }
 
   .text-2xl {
-    font-size: 1.25rem !important;
+    font-size: 1.25rem;
   }
 
   /* Tablas: evitar que cabeceras ocupen demasiado espacio */
   th {
-    font-weight: 600 !important;
-    font-size: 0.75rem !important;
+    font-weight: 600;
+    font-size: 0.75rem;
   }
 
   /* Tarjetas y contenedores: reducir padding para que quepa mejor */
   .card {
-    padding: 1rem !important;
-    border-radius: 0.75rem !important;
-  }
-
-  /* Botones más compactos */
-  .btn-primary {
-    padding: 0.5rem 0.75rem !important;
-  }
-
-  /* Evitar texto excesivamente oscuro en componentes que usan texto muy pesado */
-  .text-slate-900 {
-    color: var(--color-text) !important;
+    padding: 1rem;
+    border-radius: 0.75rem;
   }
 }
 
@@ -403,14 +391,8 @@ p {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
-}
 
-
-
-@layer base {
-  * {
-    @apply border-border;
-  }
+  /* Base utilities aplicadas globalmente (sin usar @apply en selector universal) */
   body {
     @apply bg-background text-foreground;
   }
