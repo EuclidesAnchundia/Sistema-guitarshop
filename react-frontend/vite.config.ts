@@ -66,6 +66,9 @@ function sanitizeStatsAfterWrite() {
 }
 
 export default defineConfig({
+  // Usar rutas relativas en el build para que `index.html` cargue assets
+  // correctamente cuando el sitio no se sirve desde la raíz del dominio.
+  base: "./",
   plugins: [
     react(),
     // normalizar rutas y luego genera dist/stats.html con análisis del bundle
