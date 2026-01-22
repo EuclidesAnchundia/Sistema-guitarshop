@@ -94,13 +94,14 @@ export default defineConfig({
       output: {
         manualChunks(id: string) {
           if (!id.includes('node_modules')) return undefined;
-          // use folder-based regex to avoid accidental matches (Windows/Unix paths)
-          const mm = /node_modules[\\/](react|react-dom)[\\/]/;
+          // Group most node_modules into a single 'vendor' chunk to avoid
+          // circular runtime dependencies between separate vendor chunks
+          // (React + other libraries). Keep a couple of very large libs
+          // in their own chunks for caching, but otherwise return 'vendor'.
           const xlsx = /node_modules[\\/]xlsx[\\/]/;
           const tanstack = /node_modules[\\/]@tanstack[\\/]/;
           const jspdf = /node_modules[\\/]jspdf[\\/]/;
           const lucide = /node_modules[\\/]lucide-react[\\/]/;
-          if (mm.test(id)) return 'react-vendor';
           if (xlsx.test(id)) return 'xlsx';
           if (tanstack.test(id)) return 'tanstack-vendor';
           if (jspdf.test(id)) return 'jspdf';
