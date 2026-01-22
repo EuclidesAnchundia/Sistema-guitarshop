@@ -162,11 +162,12 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={onSubmit} autoComplete="on" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <FormField label="Nombre completo" error={form.formState.errors.nombre_completo?.message}>
             <input
               type="text"
+              autoComplete="name"
               {...form.register("nombre_completo")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
@@ -175,6 +176,7 @@ export default function ProfilePage() {
           <FormField label="Correo" error={form.formState.errors.correo?.message}>
             <input
               type="email"
+              autoComplete="email"
               {...form.register("correo")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
@@ -183,6 +185,7 @@ export default function ProfilePage() {
           <FormField label="Teléfono" error={form.formState.errors.telefono?.message}>
             <input
               type="tel"
+              autoComplete="tel"
               {...form.register("telefono")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
@@ -191,6 +194,7 @@ export default function ProfilePage() {
           <FormField label="Dirección" error={form.formState.errors.direccion?.message}>
             <input
               type="text"
+              autoComplete="street-address"
               {...form.register("direccion")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
@@ -202,6 +206,7 @@ export default function ProfilePage() {
           <FormField label="Nueva contraseña" description="Déjalo vacío si no deseas cambiarla" error={form.formState.errors.password?.message}>
             <input
               type="password"
+              autoComplete="new-password"
               {...form.register("password")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
@@ -210,6 +215,7 @@ export default function ProfilePage() {
           <FormField label="Confirmar contraseña" error={form.formState.errors.confirmarPassword?.message}>
             <input
               type="password"
+              autoComplete="new-password"
               {...form.register("confirmarPassword")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-slate-900 focus:outline-none"
               disabled={disabled}
