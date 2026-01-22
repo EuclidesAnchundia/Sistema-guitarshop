@@ -6,8 +6,8 @@ type LoginBody = {
   password: string;
 };
 
-export async function OPTIONS() {
-  return optionsCors();
+export async function OPTIONS(request: Request) {
+  return optionsCors(request);
 }
 
 export async function POST(request: Request) {
@@ -18,7 +18,8 @@ export async function POST(request: Request) {
     if (!email || !password) {
       return jsonCors(
         { error: "Email y contraseña son obligatorios" },
-        { status: 400 }
+        { status: 400 },
+        request
       );
     }
 
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
     if (!result) {
       return jsonCors(
         { error: "Credenciales inválidas" },
-        { status: 401 }
+        { status: 401 },
+        request
       );
     }
 
@@ -37,13 +39,15 @@ export async function POST(request: Request) {
         token: result.token,
         usuario: result.usuario,
       },
-      { status: 200 }
+      { status: 200 },
+      request
     );
   } catch (error) {
     console.error("Error en /api/login:", error);
     return jsonCors(
       { error: "Error interno del servidor" },
-      { status: 500 }
+      { status: 500 },
+      request
     );
   }
 }
