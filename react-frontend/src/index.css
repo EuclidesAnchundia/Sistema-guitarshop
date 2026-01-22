@@ -264,6 +264,23 @@ h6 {
   margin-bottom: 0.5rem;
 }
 
+/* Ajustes para dispositivos móviles: reducir ligeramente el peso
+   tipográfico para mejorar legibilidad en pantallas pequeñas. */
+@media (max-width: 640px) {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 500;
+  }
+
+  .btn-primary {
+    font-weight: 500;
+  }
+}
+
 p {
   color: var(--color-muted);
 }
