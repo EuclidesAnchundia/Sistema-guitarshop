@@ -155,7 +155,13 @@ export default function CreditosPage() {
           number: serverCuota.numero_cuota ?? serverCuota.number,
           amount: Number(serverCuota.monto_cuota ?? serverCuota.amount ?? 0),
           paidAmount: Number(serverCuota.monto_pagado ?? serverCuota.paidAmount ?? 0),
-          status: serverCuota.estado_cuota ?? serverCuota.status,
+          // Normalizar estado en cliente por seguridad: si el monto pagado alcanza el monto, marcar PAGADA; si hay abono, PARCIAL.
+          status:
+            Number(serverCuota.monto_pagado ?? serverCuota.paidAmount ?? 0) >= Number(serverCuota.monto_cuota ?? serverCuota.amount ?? 0) - 0.0001
+              ? "PAGADA"
+              : Number(serverCuota.monto_pagado ?? serverCuota.paidAmount ?? 0) > 0
+              ? "PARCIAL"
+              : (serverCuota.estado_cuota ?? serverCuota.status),
           paidAt: serverCuota.fecha_pago ? new Date(serverCuota.fecha_pago).toISOString() : null,
         }
 
